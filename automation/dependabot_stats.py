@@ -14,13 +14,14 @@ from datetime import UTC, datetime, timedelta
 
 from dependabot_merge import DEV, LABEL_AUTO, MINOR, PATCH, parse_updated_dependencies
 
-FIELDS = "number,title,state,createdAt,mergedAt,labels,reviews,commits,headRefName"
-BOTS = {"dependabot[bot]", "github-actions[bot]", "dependabot", "github-actions"}
+FIELDS = "number,title,state,createdAt,mergedAt,mergedBy,labels,reviews,commits,headRefName"
 
 
 def kind_of(pr: dict) -> str:
     """PR を、更新の種類で分ける。"""
-    deps = parse_updated_dependencies(pr["commits"][0]["messageBody"]) if pr["commits"] else []
+    deps: list[dict[str, str]] = []
+    for commit in pr["commits"]:
+        deps = deps or parse_updated_dependencies(commit["messageBody"])
     if not deps:
         return "不明"
     if any("dependency-group" not in dep for dep in deps):
@@ -34,12 +35,15 @@ def kind_of(pr: dict) -> str:
     return "major"
 
 
-def work_of(pr: dict) -> str:
+def is_bot(login: str, bots: set[str]) -> bool:
+    return login.endswith("[bot]") or login in bots
+
+
+def work_of(pr: dict, bots: set[str]) -> str:
     """PR がどう片づいたかを分ける。"""
-    human_commits = any(
-        author["login"] not in BOTS for commit in pr["commits"] for author in commit["authors"]
-    )
-    human_reviews = any(review["author"]["login"] not in BOTS for review in pr["reviews"])
+    human_commits = any(not is_bot(author["login"], bots) for commit in pr["commits"] for author in commit["authors"])
+    human_reviews = any(not is_bot(review["author"]["login"], bots) for review in pr["reviews"])
+    merged_by_human = bool(pr["mergedBy"]) and not pr["mergedBy"].get("is_bot", False)
     labels = {label["name"] for label in pr["labels"]}
     if pr["state"] == "OPEN":
         return "開いたまま"
@@ -47,9 +51,18 @@ def work_of(pr: dict) -> str:
         return "閉じた"
     if human_commits:
         return "人がファイルを直した"
-    if human_reviews:
-        return "人が承認だけした"
+    if human_reviews or merged_by_human:
+        return "人が承認かマージだけした"
     return "自動マージ" if LABEL_AUTO in labels else "人の操作なし"
+
+
+def bot_logins(prs: list[dict]) -> set[str]:
+    """レビューやマージをした bot の名前を集める。レビューの作者名には [bot] が付かないため。"""
+    bots = {"dependabot", "github-actions"}
+    for pr in prs:
+        if pr["mergedBy"] and pr["mergedBy"].get("is_bot"):
+            bots.add(pr["mergedBy"]["login"].removeprefix("app/"))
+    return bots
 
 
 def collect(repo: str, days: int, now: datetime) -> list[dict]:
@@ -64,10 +77,11 @@ def collect(repo: str, days: int, now: datetime) -> list[dict]:
 
 
 def render(prs: list[dict], days: int) -> str:
-    works = ["自動マージ", "人が承認だけした", "人がファイルを直した", "人の操作なし", "閉じた", "開いたまま"]
+    works = ["自動マージ", "人が承認かマージだけした", "人がファイルを直した", "人の操作なし", "閉じた", "開いたまま"]
+    bots = bot_logins(prs)
     table: dict[str, Counter] = {}
     for pr in prs:
-        table.setdefault(kind_of(pr), Counter())[work_of(pr)] += 1
+        table.setdefault(kind_of(pr), Counter())[work_of(pr, bots)] += 1
     lines = [
         f"## Dependabot の PR（直近 {days} 日、{len(prs)} 本）",
         "",
@@ -81,7 +95,7 @@ def render(prs: list[dict], days: int) -> str:
     for counts in table.values():
         total.update(counts)
     lines.append(f"| 合計 | {len(prs)} | " + " | ".join(str(total[w]) for w in works) + " |")
-    touched = total["人が承認だけした"] + total["人がファイルを直した"]
+    touched = total["人が承認かマージだけした"] + total["人がファイルを直した"]
     lines += ["", f"人が触った本数は {touched} 本、自動マージは {total['自動マージ']} 本です。"]
     return "\n".join(lines)
 
