@@ -2,14 +2,16 @@
 
 版の正本は、それぞれの道具が自分で読む場所に置く。
 
-- Python: pyproject.toml の requires-python（uv が読む）
+- Python: .python-version（uv が読む。api/ からも、親のディレクトリのこのファイルが読まれる）
 - uv: pyproject.toml の開発用の依存 uv==（uv.lock に入り、setup-uv が uv.lock から読む）
 - Node: web/.node-version（setup-node や手元の版管理の道具が読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
 
 uv は PyPI のパッケージなので、Dependabot が直接上げる。
-[tool.uv] required-version は 1 点に固定しない。Dependabot の中の uv と違う版に固定すると、
-Dependabot の更新が tool_version_not_supported で失敗するため。
+
+1 点に固定できない場所が 2 つある。どちらも、Dependabot の uv の更新が失敗するため。
+- requires-python: Dependabot は自分の Python（別の patch）で uv lock を動かす
+- [tool.uv] required-version（uv.toml でも同じ）: Dependabot は自分の uv で uv lock を動かす
 
 Python、Node、Terraform の正本は、Dependabot が書き換えられない。書き換えられるのは Dockerfile の
 FROM なので、versions/Dockerfile を見張り役として置き、Dependabot にはそこを上げさせる。
@@ -17,8 +19,8 @@ FROM なので、versions/Dockerfile を見張り役として置き、Dependabot
 
 使い方:
   versions.py show          正本の版を key=value で出す
-  versions.py check         正本、見張り役、ロックファイルが揃っていることを確かめる
-  versions.py sync          見張り役の版を正本へ写す（ロックファイルは別に作り直す）
+  versions.py check         正本と見張り役が揃っていることを確かめる
+  versions.py sync          見張り役の版を正本へ写す
 """
 
 from __future__ import annotations
@@ -29,8 +31,8 @@ import sys
 from pathlib import Path
 
 SENTINEL = "versions/Dockerfile"
-PYPROJECTS = ("pyproject.toml", "api/pyproject.toml")
-LOCKFILES = ("uv.lock", "api/uv.lock")
+PYTHON_VERSION_FILE = ".python-version"
+PYPROJECT = "pyproject.toml"
 NODE_VERSION_FILE = "web/.node-version"
 TERRAFORM_FILE = "infra/versions.tf"
 DOCKERFILES = (SENTINEL, "api/Dockerfile")
@@ -58,32 +60,27 @@ def one(pattern: str, text: str, where: str) -> re.Match[str]:
 
 
 PATTERNS = {
-    "python": rf'^requires-python\s*=\s*"==({VERSION})"\s*$',
+    "python": rf"^({VERSION})\s*$",
     "uv": rf'^\s*"uv==({VERSION})",?\s*$',
     "node": rf"^({VERSION})\s*$",
     "terraform": rf'^\s*required_version\s*=\s*"=\s*({VERSION})"\s*$',
 }
 
 
-def sources(name: str) -> tuple[str, ...]:
-    """その版の正本のファイル。Python は、2 つのプロジェクトに同じ値を書く。"""
-    return {
-        "python": PYPROJECTS,
-        "uv": (PYPROJECTS[0],),
-        "node": (NODE_VERSION_FILE,),
-        "terraform": (TERRAFORM_FILE,),
-    }[name]
+SOURCES = {
+    "python": PYTHON_VERSION_FILE,
+    "uv": PYPROJECT,
+    "node": NODE_VERSION_FILE,
+    "terraform": TERRAFORM_FILE,
+}
 
 
 def read_sources(root: Path) -> dict[str, str]:
-    """正本から版を読む。同じ版を書く場所どうしが食い違っていたら失敗させる。"""
-    versions: dict[str, str] = {}
-    for name, pattern in PATTERNS.items():
-        found = {path: one(pattern, (root / path).read_text(), path).group(1) for path in sources(name)}
-        if len(set(found.values())) != 1:
-            raise VersionError(f"{name} の版が食い違っています: {found}")
-        versions[name] = next(iter(found.values()))
-    return versions
+    """正本から版を読む。"""
+    return {
+        name: one(pattern, (root / SOURCES[name]).read_text(), SOURCES[name]).group(1)
+        for name, pattern in PATTERNS.items()
+    }
 
 
 def read_sentinel(root: Path) -> dict[str, str]:
@@ -124,10 +121,6 @@ def check(root: Path) -> list[str]:
     for name, version in wanted.items():
         if actual[name] != version:
             errors.append(f"{name}: 正本は {actual[name]}、{SENTINEL} は {version}。versions.py sync で揃えてください")
-    for path in LOCKFILES:
-        locked = one(r'^requires-python\s*=\s*"==([^"]+)"\s*$', (root / path).read_text(), path).group(1)
-        if locked != actual["python"]:
-            errors.append(f"{path} の requires-python は {locked}、正本は {actual['python']}。uv lock し直してください")
     for path in DOCKERFILES:
         for image in images_outside_docker_hub((root / path).read_text()):
             errors.append(f"{path} の {image} は Docker Hub のイメージではありません。待機が効きません")
@@ -138,17 +131,15 @@ def sync(root: Path) -> list[str]:
     """見張り役の版を正本へ写す。書き換えたファイルを返す。"""
     wanted = read_sentinel(root)
     changed: list[str] = []
-    for name in wanted:
-        pattern = PATTERNS[name]
-        for path in sources(name):
-            file = root / path
-            text = file.read_text()
-            match = one(pattern, text, path)
-            if match.group(1) == wanted[name]:
-                continue
-            file.write_text(text[: match.start(1)] + wanted[name] + text[match.end(1) :])
-            if path not in changed:
-                changed.append(path)
+    for name, version in wanted.items():
+        path = SOURCES[name]
+        file = root / path
+        text = file.read_text()
+        match = one(PATTERNS[name], text, path)
+        if match.group(1) == version:
+            continue
+        file.write_text(text[: match.start(1)] + version + text[match.end(1) :])
+        changed.append(path)
     return changed
 
 
@@ -170,7 +161,7 @@ def main() -> int:
                 print(f"NG: {message}")
             if errors:
                 return 1
-            print("OK: 版の正本、見張り役、ロックファイルは揃っています")
+            print("OK: 版の正本と見張り役は揃っています")
     except (VersionError, OSError) as error:
         print(f"NG: {error}")
         return 1

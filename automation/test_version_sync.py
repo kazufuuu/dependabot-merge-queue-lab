@@ -21,7 +21,7 @@ class CandidateTest(unittest.TestCase):
         self.assertTrue(version_sync.is_candidate(pr()))
 
     def test_pr_touching_other_files_is_not(self):
-        self.assertFalse(version_sync.is_candidate(pr(files=[versions.SENTINEL, "pyproject.toml"])))
+        self.assertFalse(version_sync.is_candidate(pr(files=[versions.SENTINEL, ".python-version"])))
         self.assertFalse(version_sync.is_candidate(pr(files=["api/Dockerfile"])))
 
     def test_pr_already_synced_is_not(self):
@@ -39,16 +39,16 @@ class CandidateTest(unittest.TestCase):
 
 class PayloadTest(unittest.TestCase):
     def test_payload_survives_the_round_trip(self):
-        payload = {"number": 3, "head": "abc", "files": {"uv.lock": "版 = 1\n"}}
+        payload = {"number": 3, "head": "abc", "files": {".python-version": "3.13.99\n"}}
         self.assertEqual(version_sync.decode(version_sync.encode(payload)), payload)
 
     def test_allowed_files_pass(self):
         version_sync.validate_paths(sorted(version_sync.ALLOWED))
 
     def test_other_files_are_refused(self):
-        for path in (".github/workflows/ci.yml", "api/src/api/__init__.py", versions.SENTINEL, "automation/versions.py"):
+        for path in (".github/workflows/ci.yml", "pyproject.toml", "uv.lock", versions.SENTINEL, "automation/versions.py"):
             with self.assertRaises(version_sync.SyncError):
-                version_sync.validate_paths(["uv.lock", path])
+                version_sync.validate_paths([".python-version", path])
 
 
 if __name__ == "__main__":

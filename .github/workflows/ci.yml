@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # テストは runner の上で直接動かす。版は正本から読む。
-# - Python: pyproject.toml の requires-python（uv が読む）
+# - Python: .python-version（uv が読む）
 # - uv: pyproject.toml の開発用の依存 uv==（setup-uv が uv.lock から読む）
 # - Node: web/.node-version（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
@@ -46,7 +46,7 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           working-directory: api
-          version-file: uv.lock
+          version-file: ${{ github.workspace }}/uv.lock
           enable-cache: true
           cache-python: true
       - run: uv sync --locked
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: 振り分けと版の同期のテスト
         run: python3 -m unittest discover -s automation -v
-      - name: 版の正本、見張り役、ロックファイルが揃っていることを確かめる
+      - name: 版の正本と見張り役が揃っていることを確かめる
         run: python3 automation/versions.py check
 
   # 本番のイメージが組み立てられることと、起動することを確かめる。テストはここでは動かさない。

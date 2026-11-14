@@ -1,6 +1,6 @@
 name: version-sync
 
-# Dependabot が見張り役（versions/Dockerfile）の版を上げた PR に、正本とロックファイルの変更を積む。
+# Dependabot が見張り役（versions/Dockerfile）の版を上げた PR に、正本の変更を積む。
 # スクリプトは常に main の版で動かす。
 on:
   workflow_run:
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 鍵を持たない。PR の head を取り出し、版を写して、ロックファイルを作り直す。
+  # 鍵を持たない。PR の head を取り出し、見張り役の版を正本へ写す。
   compute:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -36,16 +36,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 automation/version_sync.py prepare
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
-        if: steps.prepare.outputs.number != ''
-        with:
-          version-file: pr/uv.lock
-          enable-cache: false
-      - name: ロックファイルを作り直す
-        if: steps.prepare.outputs.number != ''
-        run: |
-          (cd pr && uv lock)
-          (cd pr/api && uv lock)
       - name: 変わったファイルを集める
         id: collect
         if: steps.prepare.outputs.number != ''

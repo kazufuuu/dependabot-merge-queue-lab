@@ -6,14 +6,7 @@ from pathlib import Path
 import versions
 
 REPO = Path(__file__).resolve().parent.parent
-FILES = (
-    versions.SENTINEL,
-    *versions.PYPROJECTS,
-    *versions.LOCKFILES,
-    versions.NODE_VERSION_FILE,
-    versions.TERRAFORM_FILE,
-    "api/Dockerfile",
-)
+FILES = (versions.SENTINEL, *versions.SOURCES.values(), "api/Dockerfile")
 
 
 class VersionsTest(unittest.TestCase):
@@ -46,7 +39,7 @@ class VersionsTest(unittest.TestCase):
         self.edit("pyproject.toml", f'"uv=={versions.read_sources(self.root)["uv"]}"', '"uv==0.99.1"')
         self.assertEqual(versions.read_sources(self.root)["uv"], "0.99.1")
         # uv は Dependabot が直接上げるので、見張り役とは比べない。
-        self.assertTrue(all("uv:" not in error for error in versions.check(self.root)))
+        self.assertEqual(versions.check(self.root), [])
 
     def test_check_reports_sentinel_ahead_of_sources(self):
         self.bump_sentinel("python", "3.13.99")
@@ -60,41 +53,35 @@ class VersionsTest(unittest.TestCase):
             self.bump_sentinel(name, new)
         changed = versions.sync(self.root)
         self.assertEqual(
-            sorted(changed), sorted([*versions.PYPROJECTS, versions.NODE_VERSION_FILE, versions.TERRAFORM_FILE])
+            sorted(changed),
+            sorted([versions.PYTHON_VERSION_FILE, versions.NODE_VERSION_FILE, versions.TERRAFORM_FILE]),
         )
         self.assertEqual(
             versions.read_sources(self.root),
             {"python": "3.13.99", "uv": uv, "node": "24.99.1", "terraform": "1.99.1"},
         )
+        self.assertEqual(versions.check(self.root), [])
 
     def test_sync_changes_nothing_else(self):
-        before = {path: (self.root / path).read_text() for path in versions.PYPROJECTS}
-        old = self.bump_sentinel("python", "3.13.99")
-        versions.sync(self.root)
-        for path, text in before.items():
-            expected = text.replace(f'requires-python = "=={old}"', 'requires-python = "==3.13.99"')
-            self.assertEqual((self.root / path).read_text(), expected)
+        before = (self.root / versions.TERRAFORM_FILE).read_text()
+        old = self.bump_sentinel("terraform", "1.99.1")
+        self.assertEqual(versions.sync(self.root), [versions.TERRAFORM_FILE])
+        expected = before.replace(f'required_version = "= {old}"', 'required_version = "= 1.99.1"')
+        self.assertEqual((self.root / versions.TERRAFORM_FILE).read_text(), expected)
 
     def test_sync_without_change_writes_nothing(self):
         self.assertEqual(versions.sync(self.root), [])
 
-    def test_after_sync_only_the_lockfiles_are_stale(self):
-        self.bump_sentinel("python", "3.13.99")
-        versions.sync(self.root)
-        errors = versions.check(self.root)
-        self.assertEqual(len(errors), len(versions.LOCKFILES))
-        self.assertTrue(all("uv lock" in error for error in errors))
-
     def test_missing_source_fails(self):
-        self.edit("pyproject.toml", 'requires-python = "==', 'requires-python = ">=')
+        self.edit(versions.TERRAFORM_FILE, 'required_version = "= ', 'required_version = ">= ')
         with self.assertRaises(versions.VersionError):
             versions.read_sources(self.root)
+        self.bump_sentinel("terraform", "1.99.1")
         with self.assertRaises(versions.VersionError):
             versions.sync(self.root)
 
-    def test_disagreeing_sources_fail(self):
-        python = versions.read_sources(self.root)["python"]
-        self.edit("api/pyproject.toml", f'requires-python = "=={python}"', 'requires-python = "==3.13.1"')
+    def test_version_without_patch_fails(self):
+        (self.root / versions.PYTHON_VERSION_FILE).write_text("3.13\n")
         with self.assertRaises(versions.VersionError):
             versions.read_sources(self.root)
 
@@ -113,6 +100,7 @@ class VersionsTest(unittest.TestCase):
         self.edit(versions.SENTINEL, "FROM hashicorp/terraform:", "FROM ghcr.io/hashicorp/terraform:")
         text = (self.root / versions.SENTINEL).read_text()
         self.assertEqual(len(versions.images_outside_docker_hub(text)), 1)
+        self.assertEqual(len(versions.check(self.root)), 1)
 
     def test_build_argument_images_are_docker_hub(self):
         self.assertEqual(versions.images_outside_docker_hub((REPO / "api/Dockerfile").read_text()), [])
