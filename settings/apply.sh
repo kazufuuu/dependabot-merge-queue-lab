@@ -37,4 +37,15 @@ for file in ruleset.json ruleset-tags.json; do
     gh api -X POST "repos/$repo/rulesets" --input "$dir/$file" >/dev/null
   fi
 done
+# レビューの依頼を、team の中の決めた人数に割り振る。人数は automation/policy.json の review_count。
+team="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_team"])' "$dir/../automation/policy.json")"
+count="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_count"])' "$dir/../automation/policy.json")"
+team_id="$(gh api graphql -f query='query($org: String!, $team: String!) { organization(login: $org) { team(slug: $team) { id } } }' \
+  -f org="${repo%%/*}" -f team="$team" --jq '.data.organization.team.id')"
+gh api graphql -f query='mutation($id: ID!, $count: Int!) {
+  updateTeamReviewAssignment(input: {id: $id, enabled: true, algorithm: LOAD_BALANCE, teamMemberCount: $count, notifyTeam: false}) {
+    team { reviewRequestDelegationMemberCount }
+  }
+}' -f id="$team_id" -F count="$count" >/dev/null
+
 echo "applied to $repo"

@@ -116,10 +116,10 @@ updates:
   - package-ecosystem: docker
     directory: /versions
     # コンテナイメージには、Dependabot のセキュリティ更新が無い。Python と Node のセキュリティの修正は、
-    # ふつうの patch として出る。速く追随するため、6 時間ごとに確かめ、python と node は待機から外す。
+    # ふつうの patch として出る。速く追随するため、毎日確かめ、python と node は待機から外す。
     schedule:
-      interval: cron
-      cronjob: "17 */6 * * *"
+      interval: daily
+      time: "09:00"
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7

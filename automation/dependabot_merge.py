@@ -50,6 +50,8 @@ DEPENDABOT_COMMITTER = "dependabot[bot]"  # コミットの作者
 
 @dataclass(frozen=True)
 class Policy:
+    review_team: str
+    review_count: int
     reviewers: tuple[str, ...]
     required_check: str
     ci_workflow: str
@@ -80,7 +82,7 @@ class Plan:
     disable_auto_merge: bool = False
     add_labels: list[str] = field(default_factory=list)
     remove_labels: list[str] = field(default_factory=list)
-    request_reviewers: list[str] = field(default_factory=list)
+    request_review: bool = False
     comment: str | None = None
 
     def is_noop(self) -> bool:
@@ -90,7 +92,7 @@ class Plan:
             or self.disable_auto_merge
             or self.add_labels
             or self.remove_labels
-            or self.request_reviewers
+            or self.request_review
             or self.comment
         )
 
@@ -99,6 +101,8 @@ def load_policy(env: dict[str, str] | None = None) -> Policy:
     env = os.environ if env is None else env
     raw = json.loads(POLICY_PATH.read_text())
     return Policy(
+        review_team=raw["review_team"],
+        review_count=raw["review_count"],
         reviewers=tuple(raw["reviewers"]),
         required_check=raw["required_check"],
         ci_workflow=raw["ci_workflow"],
@@ -246,8 +250,9 @@ def plan_for(pr: dict, policy: Policy) -> Plan:
             plan.comment = "自動マージの対象外です。レビューをお願いします。\n\n" + "\n".join(
                 f"- {reason}" for reason in reasons
             )
-        done = set(pr["requested_reviewers"]) | set(pr["human_reviewers"])
-        plan.request_reviewers = [r for r in policy.reviewers if r not in done]
+        # 所有者のいるファイルを変える PR には、GitHub が CODEOWNERS の team に依頼を付けている。
+        # 依頼もレビューもまだ無いときだけ、こちらから依頼する。
+        plan.request_review = not pr["requested_reviewers"] and not pr["human_reviewers"]
         return plan
 
     if not decision.auto:
@@ -283,7 +288,7 @@ query($owner: String!, $name: String!) {
         headRefOid
         author { __typename login }
         labels(first: 30) { nodes { name } }
-        reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } } } }
+        reviewRequests(first: 20) { nodes { requestedReviewer { ... on User { login } ... on Team { slug } } } }
         latestReviews(first: 30) { nodes { state author { __typename login } commit { oid } } }
         commits(first: 10) {
           totalCount
@@ -346,9 +351,9 @@ def normalize(node: dict, policy: Policy, pushers: dict[str, list[str]]) -> dict
         "files": [f["path"] for f in node["files"]["nodes"]],
         "files_truncated": node["files"]["totalCount"] > len(node["files"]["nodes"]),
         "requested_reviewers": [
-            r["requestedReviewer"]["login"]
+            r["requestedReviewer"].get("login") or "team:" + r["requestedReviewer"]["slug"]
             for r in node["reviewRequests"]["nodes"]
-            if r["requestedReviewer"] and "login" in r["requestedReviewer"]
+            if r["requestedReviewer"]
         ],
         "human_reviewers": [
             r["author"]["login"] for r in reviews if r["author"] and r["author"]["__typename"] == "User"
@@ -385,7 +390,28 @@ def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
     return pulls
 
 
-def apply_triage(plan: Plan, repo: str) -> None:
+def fallback_reviewers(number: int, policy: Policy) -> list[str]:
+    """team に依頼できないときの割り振り。PR の番号で順番に回す。"""
+    people = list(policy.reviewers)
+    count = min(policy.review_count, len(people))
+    return [people[(number + offset) % len(people)] for offset in range(count)]
+
+
+def request_review(number: int, repo: str, policy: Policy) -> None:
+    """team にレビューを依頼する。割り振る人数と人選は、team の code review assignment が決める。"""
+    path = f"repos/{repo}/pulls/{number}/requested_reviewers"
+    try:
+        gh("api", "-X", "POST", path, "-f", f"team_reviewers[]={policy.review_team}")
+        print(f"#{number}: team {policy.review_team} に依頼しました")
+        return
+    except RuntimeError as error:
+        print(f"#{number}: team に依頼できませんでした（{error}）。個人に順番で依頼します")
+    people = fallback_reviewers(number, policy)
+    gh("api", "-X", "POST", path, *[arg for person in people for arg in ("-f", f"reviewers[]={person}")])
+    print(f"#{number}: {', '.join(people)} に依頼しました")
+
+
+def apply_triage(plan: Plan, repo: str, policy: Policy) -> None:
     """ラベル、レビュー依頼、コメントを付ける。GITHUB_TOKEN で行う。"""
     number = str(plan.number)
     for label in plan.remove_labels:
@@ -395,11 +421,8 @@ def apply_triage(plan: Plan, repo: str) -> None:
     for label in plan.add_labels:
         if label != LABEL_AUTO:
             gh("pr", "edit", number, "--repo", repo, "--add-label", label)
-    if plan.request_reviewers:
-        gh(
-            "api", "-X", "POST", f"repos/{repo}/pulls/{number}/requested_reviewers",
-            *[arg for reviewer in plan.request_reviewers for arg in ("-f", f"reviewers[]={reviewer}")],
-        )  # fmt: skip
+    if plan.request_review:
+        request_review(plan.number, repo, policy)
     if plan.comment:
         gh("pr", "comment", number, "--repo", repo, "--body", plan.comment)
 
@@ -471,7 +494,7 @@ def main() -> int:
         return 2
     repo = os.environ["GITHUB_REPOSITORY"]
     policy = load_policy()
-    print(f"policy: dev_minor={policy.dev_minor} runtime_patch={policy.runtime_patch} reviewers={list(policy.reviewers)}")
+    print(f"policy: dev_minor={policy.dev_minor} runtime_patch={policy.runtime_patch} review_team={policy.review_team}")
     token = None
     failed = False
     to_merge = 0
@@ -481,7 +504,7 @@ def main() -> int:
         to_merge += plan.enqueue
         try:
             if mode == "triage" and not plan.is_noop():
-                apply_triage(plan, repo)
+                apply_triage(plan, repo, policy)
             elif mode == "merge" and plan.enqueue:
                 token = token or app_token(
                     repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"]

@@ -5,13 +5,16 @@ from dependabot_merge import (
     LABEL_HUMAN,
     Policy,
     classify,
+    fallback_reviewers,
     normalize,
     parse_updated_dependencies,
     plan_for,
 )
 
 POLICY = Policy(
-    reviewers=("alice",),
+    review_team="reviewers",
+    review_count=1,
+    reviewers=("alice", "bob", "carol"),
     required_check="all-green",
     ci_workflow="ci.yml",
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
@@ -274,12 +277,28 @@ class RuntimePatchTest(unittest.TestCase):
         self.assertTrue(classify(pr(), RUNTIME).auto)
 
 
+class ReviewerTest(unittest.TestCase):
+    def test_owned_files_already_requested_by_codeowners_are_not_requested_again(self):
+        target = with_deps(dep(update="minor", group="minor"), requested_reviewers=["team:reviewers"])
+        self.assertFalse(plan_for(target, POLICY).request_review)
+
+    def test_fallback_rotates_by_pr_number(self):
+        picked = [fallback_reviewers(number, POLICY)[0] for number in range(1, 7)]
+        self.assertEqual(picked, ["bob", "carol", "alice", "bob", "carol", "alice"])
+
+    def test_fallback_count_is_configurable(self):
+        two = Policy(**{**POLICY.__dict__, "review_count": 2})
+        self.assertEqual(fallback_reviewers(1, two), ["bob", "carol"])
+        many = Policy(**{**POLICY.__dict__, "review_count": 9})
+        self.assertEqual(len(fallback_reviewers(1, many)), 3)
+
+
 class PlanTest(unittest.TestCase):
     def test_auto_with_green_check_is_approved_labeled_and_enqueued(self):
         plan = plan_for(pr(), POLICY)
         self.assertTrue(plan.approve and plan.enqueue)
         self.assertEqual(plan.add_labels, [LABEL_AUTO])
-        self.assertEqual(plan.request_reviewers, [])
+        self.assertFalse(plan.request_review)
 
     def test_auto_with_pending_check_waits(self):
         self.assertTrue(plan_for(pr(check="pending"), POLICY).is_noop())
@@ -288,7 +307,7 @@ class PlanTest(unittest.TestCase):
         plan = plan_for(pr(check="failure"), POLICY)
         self.assertFalse(plan.approve or plan.enqueue)
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
-        self.assertEqual(plan.request_reviewers, ["alice"])
+        self.assertTrue(plan.request_review)
         self.assertIn("必須の検査が落ちました", plan.comment)
 
     def test_queued_pr_is_left_alone(self):
@@ -300,7 +319,7 @@ class PlanTest(unittest.TestCase):
         self.assertFalse(plan.approve or plan.enqueue)
         self.assertEqual(plan.remove_labels, [LABEL_AUTO])
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
-        self.assertEqual(plan.request_reviewers, ["alice"])
+        self.assertTrue(plan.request_review)
 
     def test_removed_pr_is_not_requeued_on_later_runs(self):
         target = pr(labels=[LABEL_HUMAN], approved_commits=["aaa"], requested_reviewers=["alice"])
@@ -315,7 +334,7 @@ class PlanTest(unittest.TestCase):
     def test_human_pr_gets_reviewer_label_and_comment_once(self):
         target = with_deps(dep(update="minor", group="minor"))
         plan = plan_for(target, POLICY)
-        self.assertEqual(plan.request_reviewers, ["alice"])
+        self.assertTrue(plan.request_review)
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
         self.assertIsNotNone(plan.comment)
         again = with_deps(
