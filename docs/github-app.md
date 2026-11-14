@@ -99,20 +99,27 @@ gh secret set AUTOMERGE_APP_PRIVATE_KEY --env automerge --repo "$repo" < <保存
 「GitHub Actions による PR の承認」を無効にします。
 
 - リポジトリは `settings/apply.sh` が無効にします。画面では Settings、Actions、General の Workflow permissions にあります
-- 組織は、所有者が Settings、Actions、General の同じ項目を外します。コマンドでは次のとおりです
+- 組織は、所有者が次のコマンドで無効にします。画面では、組織の Settings、Actions、General の同じ項目です
 
 ```sh
-gh api -X PUT orgs/<組織>/actions/permissions/workflow \
-  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
+echo '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}' |
+  gh api -X PUT orgs/<組織>/actions/permissions/workflow --input -
+gh api orgs/<組織>/actions/permissions/workflow
 ```
+
+組織の設定は、値を JSON で渡します。`-F` で渡したときは、エラーにならないまま値が変わりませんでした。
 
 ## 動作の確かめ方
 
+このリポジトリで確かめた結果は、[app-request.md](app-request.md) に実行の URL つきで書いています。
+
 - patch のグループで、ロックファイルだけを変える Dependabot の PR を待つ。検査が通ると、App が承認し、`automerge` ラベルが付き、マージキューを通ってマージされる
-- PR のブランチに、`environment: automerge` を指定した job を足す。その job は、ブランチが許可されていないという理由で動かない
-- PR のブランチに、`GITHUB_TOKEN` で PR を承認する workflow を足す。承認の API は失敗する
+- main 以外のブランチに、`environment: automerge` を指定した job を足す。その job は、ブランチが許可されていないという理由で動かない
+- main 以外のブランチに、`GITHUB_TOKEN` で PR を承認する workflow を足す。承認の API は 422 で失敗する
 
 ## 運用
+
+鍵の作り直しと、App を外す手順は、このリポジトリでは試していません。
 
 ### 鍵の作り直し
 
@@ -120,6 +127,14 @@ gh api -X PUT orgs/<組織>/actions/permissions/workflow \
 2. 「鍵の登録」のコマンドで、secret を新しい鍵に置き換える
 3. 振り分けの workflow を手動で動かし、成功を確かめる
 4. App の設定画面で、古い鍵を消す
+
+### 一時的に止める
+
+振り分けの workflow を無効にします。再開するときは `enable` を使います。
+
+```sh
+gh workflow disable dependabot-merge --repo <owner>/<repo>
+```
 
 ### App を外す
 

@@ -78,7 +78,8 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 ## 設定の反映
 
 `settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset（`settings/ruleset.json`）を反映します。
-GitHub App は手で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
+GitHub App は `settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
+App の作成をほかの部門に頼むときの依頼書は [docs/app-request.md](docs/app-request.md) です。
 
 ## 範囲の見直し
 
