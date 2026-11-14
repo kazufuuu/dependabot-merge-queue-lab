@@ -19,7 +19,40 @@ workflow の `GITHUB_TOKEN` で PR をマージキューに入れると、`merge
 App に承認させると、承認できるのは鍵を使える workflow だけになります。
 鍵は main だけが使える environment に置くので、main に入っている workflow しか承認できません。
 
-## App の作成
+## 用意の手順
+
+`settings/create-app.py` を使います。画面での操作は、ボタンを 2 回押すことと、install 先を選ぶことだけです。
+組織の所有者で、リポジトリの管理者でもある人が行います。`gh` でログインしておきます。
+
+1. environment を作る。`settings/apply.sh <owner>/<repo>` が、main だけが使える environment `automerge` を作る
+2. スクリプトを動かす
+
+   ```sh
+   settings/create-app.py <owner>/<repo>
+   ```
+
+   App の名前は `<owner>-dependabot-automerge` になる。変えるときは `--name` を付ける。名前は GitHub 全体で重ならないものにする
+3. 表示された `http://localhost:8765/` をブラウザで開き、ボタンを押す。GitHub の画面に移るので、App の作成を確かめるボタンを押す
+4. スクリプトが、App ID を environment の変数 `AUTOMERGE_APP_ID` に、秘密鍵を secret `AUTOMERGE_APP_PRIVATE_KEY` に登録する
+5. スクリプトが表示する install の URL を開く。Only select repositories を選び、対象のリポジトリだけを選んで install する
+6. スクリプトが install を確かめ、対象のリポジトリと権限を表示して終わる
+
+スクリプトがしていることは次のとおりです。
+
+- App の定義（manifest）を GitHub に送るページを、手元で出す。定義の中身は、公開しない、Webhook を使わない、権限は Contents と Pull requests の書き込みだけ、の 3 点
+- GitHub から戻ってきた一時的な code を、App ID と秘密鍵に換える。code は 1 時間で切れるので、すぐに換える
+- 秘密鍵を `gh secret set` に標準入力で渡す。秘密鍵は、画面にもファイルにも残さない。署名のあいだだけ一時ファイルに置き、すぐ消す
+
+Contents の書き込みは、マージキューに入れてマージするために要ります。
+Pull requests の書き込みは、承認とラベルのために要ります。
+
+WSL2 では、Windows 側のブラウザから `localhost:8765` に届きます。届かない環境では、下の手作業の手順を使います。
+
+## 手作業での用意
+
+スクリプトを使えないときの手順です。この手順は、このリポジトリでは試していません。
+
+### App の作成
 
 組織の所有者が行います。
 
@@ -34,15 +67,12 @@ App に承認させると、承認できるのは鍵を使える workflow だけ
 7. 作成後の画面で、App ID を控える
 8. 同じ画面の Private keys で Generate a private key を押し、鍵のファイル（`.pem`）を保存する
 
-Contents の書き込みは、マージキューに入れてマージするために要ります。
-Pull requests の書き込みは、承認とラベルのために要ります。
-
-## install
+### install
 
 1. App の設定画面で Install App を開き、組織を選ぶ
 2. Only select repositories を選び、対象のリポジトリだけを選ぶ
 
-## 鍵の登録
+### 鍵の登録
 
 environment は `settings/apply.sh <owner>/<repo>` が作ります。名前は `automerge` で、使えるブランチは main だけです。
 手で作る場合は、次のコマンドを使います。

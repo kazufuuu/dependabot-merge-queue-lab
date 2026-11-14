@@ -6,6 +6,7 @@
 # グループは semver の種別で分ける。patch のグループだけが自動マージの対象になる。
 # major はグループに入れず、依存ごとに 1 本ずつ出す。
 # セキュリティ更新はグループに入れない。待機もかからず、依存ごとにすぐ出る。
+# 自動マージの条件は automation/dependabot_merge.py にある。
 version: 2
 
 updates:
