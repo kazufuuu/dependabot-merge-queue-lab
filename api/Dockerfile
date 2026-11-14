@@ -1,6 +1,6 @@
-FROM astral/uv:0.13.5 AS uv
+FROM astral/uv:0.13.7 AS uv
 
-FROM python:3.13.16-slim AS base
+FROM python:3.13.17-slim AS base
 COPY --from=uv /uv /bin/uv
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
@@ -15,7 +15,7 @@ RUN uv run --no-sync pytest
 FROM base AS build
 RUN uv sync --locked --no-dev
 
-FROM python:3.13.16-slim AS runtime
+FROM python:3.13.17-slim AS runtime
 WORKDIR /app
 COPY --from=build /app /app
 ENV PATH="/app/.venv/bin:$PATH"
