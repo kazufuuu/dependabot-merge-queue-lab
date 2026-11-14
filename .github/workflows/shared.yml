@@ -2,6 +2,8 @@ name: shared
 on:
   pull_request:
   merge_group:
+  # PRs opened with GITHUB_TOKEN do not trigger pull_request; terraform-version dispatches this instead.
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

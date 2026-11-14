@@ -15,21 +15,32 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       HEAD: ${{ github.event.pull_request.head.sha }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      TEAM: ${{ vars.REVIEW_TEAM }}
+      REVIEWER: ${{ vars.REVIEWER }}
     steps:
-      - name: Approve and enable auto-merge for lock-file-only patch groups
+      - name: Decide whether this PR is merged without a human
+        id: decide
         if: github.actor == 'dependabot[bot]' && github.triggering_actor == 'dependabot[bot]'
         run: |
-          # version-update groups named "*-patch" only; security updates have no group in the branch name
-          case "$HEAD_REF" in
-            dependabot/*-patch-*) ;;
-            *) echo "not an auto-merge group; leaving this PR to reviewers"; exit 0 ;;
-          esac
-          files="$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')"
-          others="$(echo "$files" | grep -vE '(^|/)(uv\.lock|package-lock\.json)$' || true)"
-          if [ -n "$others" ]; then
-            echo "lock files only are auto-merged; leaving this PR to reviewers"
-            exit 0
+          # Only version-update groups named "*-patch" qualify. Their branch ends with
+          # "<group>-<10 hex>". Security updates are not grouped, so they never match.
+          auto=false
+          if [[ "$HEAD_REF" =~ ^dependabot/.+/[a-z0-9-]+-patch-[0-9a-f]{10}$ ]]; then
+            files="$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')"
+            others="$(echo "$files" | grep -vE '(^|/)(uv\.lock|package-lock\.json)$' || true)"
+            if [ -z "$others" ]; then
+              auto=true
+            else
+              echo "files other than lock files changed:"
+              echo "$others"
+            fi
+          else
+            echo "not an auto-merge group"
           fi
+          echo "auto=$auto" | tee -a "$GITHUB_OUTPUT"
+      - name: Approve, enable auto-merge and label
+        if: steps.decide.outputs.auto == 'true'
+        run: |
           gh api -X POST "repos/$REPO/pulls/$PR/reviews" -f event=APPROVE -f commit_id="$HEAD"
           gh pr merge "$PR" --repo "$REPO" --auto --squash --match-head-commit "$HEAD"
           gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=automerge"
@@ -43,3 +54,15 @@ jobs:
             gh api -X PUT "repos/$REPO/pulls/$PR/reviews/$id/dismissals" \
               -f message="pushed by a non-Dependabot actor" -f event=DISMISS
           done
+      - name: Request review from owners
+        if: steps.decide.outputs.auto == 'false' || github.actor != 'dependabot[bot]'
+        run: |
+          # GITHUB_TOKEN cannot always resolve an organisation team; fall back to a person.
+          if [ -n "$TEAM" ] && gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" \
+              -f "team_reviewers[]=$TEAM" --silent; then
+            echo "requested team $TEAM"
+            exit 0
+          fi
+          test -n "$REVIEWER"
+          gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" -f "reviewers[]=$REVIEWER" --silent
+          echo "requested $REVIEWER"

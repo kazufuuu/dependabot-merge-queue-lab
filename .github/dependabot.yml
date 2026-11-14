@@ -67,6 +67,13 @@ updates:
     assignees: [kazufusa]
     commit-message: { prefix: "deps(docker)" }
     open-pull-requests-limit: 5
+    # Runtime versions are also written in .python-version (minor) and .node-version (major).
+    # Moving those is a deliberate change, so Dependabot only moves within them.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
     groups:
       docker-patch:
         update-types: [patch]
