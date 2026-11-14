@@ -1,6 +1,7 @@
 [project]
 name = "lab-workspace"
 version = "0.0.0"
+description = "連絡先を扱うライブラリのワークスペース"
 requires-python = ">=3.13,<3.14"
 dependencies = []
 
