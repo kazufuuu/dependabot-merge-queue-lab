@@ -1,21 +1,19 @@
-FROM astral/uv:0.13.5 AS uv
+# 版はビルドの引数で受け取る。正本は pyproject.toml にある。
+# 引数を付け忘れると、FROM が成り立たずに失敗する。scripts/build-api.sh が正本から渡す。
+ARG PYTHON_VERSION
+ARG UV_VERSION
 
-FROM python:3.13.16-slim AS base
+FROM astral/uv:${UV_VERSION} AS uv
+
+FROM python:${PYTHON_VERSION}-slim AS build
 COPY --from=uv /uv /bin/uv
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src ./src
-
-FROM base AS test
-COPY tests ./tests
-RUN uv sync --locked
-RUN uv run --no-sync pytest
-
-FROM base AS build
 RUN uv sync --locked --no-dev
 
-FROM python:3.13.16-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
 COPY --from=build /app /app
 ENV PATH="/app/.venv/bin:$PATH"

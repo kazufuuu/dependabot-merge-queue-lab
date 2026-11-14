@@ -110,15 +110,11 @@ updates:
         applies-to: version-updates
         update-types: [minor]
 
-  # ランタイムと道具の版は Dockerfile の FROM で決める。
-  # 待機（cooldown）は Docker Hub のイメージにしか効かないので、イメージは Docker Hub のものを使う。
-  # 同じイメージを全部の Dockerfile で一度に上げるため、ディレクトリをまとめる。
+  # ランタイムと道具の版の正本は、pyproject.toml などにある。Dependabot はそこを書き換えられない。
+  # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
+  # 待機（cooldown）は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
   - package-ecosystem: docker
-    directories:
-      - /
-      - /api
-      - /web
-      - /tools/terraform
+    directory: /versions
     schedule:
       interval: weekly
       day: monday
@@ -138,7 +134,7 @@ updates:
         applies-to: version-updates
         update-types: [minor]
     ignore:
-      # ランタイムの minor と major は、対応する版のファイルと合わせて人が上げる。
+      # ランタイムの minor と major は、互換性の確認が要るので、人が上げる。
       - dependency-name: python
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: node

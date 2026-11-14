@@ -13,63 +13,114 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# テストは runner の上で直接動かす。版は正本から読む。
+# - Python と uv: pyproject.toml（setup-uv と uv が読む）
+# - Node: web/.node-version（setup-node が読む）
+# - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
 jobs:
   workspace:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: ワークスペースの lint とテストを、Dockerfile の版で動かす
-        run: docker build --target test .
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: true
+          cache-python: true
+      - run: uv sync --locked --all-packages
+      - run: uv run --no-sync ruff check
+      - run: uv run --no-sync pytest
 
   api:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: テストを Dockerfile の版で動かす
-        run: docker build --target test api
-      - name: 実行用のイメージを組み立てて起動する
-        run: |
-          docker build -t api api
-          docker run --rm api
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          working-directory: api
+          enable-cache: true
+          cache-python: true
+      - run: uv sync --locked
+      - run: uv run --no-sync pytest
 
   web:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: 型検査とテストを Dockerfile の版で動かす
-        run: docker build --target test web
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: web/.node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
 
   infra:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Terraform を Dockerfile の版で動かす
-        run: |
-          docker build -t terraform tools/terraform
-          tf() { docker run --rm -v "$PWD/infra:/work" -w /work terraform "$@"; }
-          tf fmt -check -diff
-          tf init -backend=false -input=false -lockfile=readonly
-          tf validate
-          tf test
+      - name: Terraform の版を正本から読む
+        id: versions
+        working-directory: .
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
+      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+      - run: terraform fmt -check -diff
+      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform validate
+      - run: terraform test
 
   automation:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: 自動マージの判定のテスト
+      - name: 振り分けと版の同期のテスト
         run: python3 -m unittest discover -s automation -v
-      - name: 版の書かれた場所がそろっていることを確かめる
-        run: python3 automation/check_versions.py
+      - name: 版の正本、見張り役、ロックファイルが揃っていることを確かめる
+        run: python3 automation/versions.py check
 
-  # 必須の検査はこの 1 つだけにする。上の検査がすべて成功したときだけ成功する。
+  # 本番のイメージが組み立てられることと、起動することを確かめる。テストはここでは動かさない。
+  # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、組み立てが落ちる更新がある。
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/buildcache
+          key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', 'pyproject.toml') }}
+          restore-keys: image-
+      - name: API のイメージを正本の版で組み立てる
+        run: |
+          docker buildx create --name ci --use >/dev/null
+          scripts/build-api.sh --builder ci --load -t api \
+            --cache-from type=local,src=/tmp/buildcache \
+            --cache-to type=local,dest=/tmp/buildcache-new,mode=max
+          rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache
+      - name: 組み立てたイメージを起動する
+        run: docker run --rm api
+
+  # 必須の検査はこの 1 つだけにする。テストとイメージの組み立てが、すべて成功したときだけ成功する。
   all-green:
     if: always()
-    needs: [workspace, api, web, infra, automation]
+    needs: [workspace, api, web, infra, automation, image]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

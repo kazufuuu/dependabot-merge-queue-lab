@@ -1,0 +1,79 @@
+name: version-sync
+
+# Dependabot が見張り役（versions/Dockerfile）の版を上げた PR に、正本とロックファイルの変更を積む。
+# スクリプトは常に main の版で動かす。
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-sync
+  cancel-in-progress: false
+
+jobs:
+  # 鍵を持たない。PR の head を取り出し、版を写して、ロックファイルを作り直す。
+  compute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    outputs:
+      payload: ${{ steps.collect.outputs.payload }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: 対象の PR を選び、見張り役の版を正本へ写す
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 automation/version_sync.py prepare
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        if: steps.prepare.outputs.number != ''
+        with:
+          working-directory: pr
+          enable-cache: false
+      - name: ロックファイルを作り直す
+        if: steps.prepare.outputs.number != ''
+        run: |
+          (cd pr && uv lock)
+          (cd pr/api && uv lock)
+      - name: 変わったファイルを集める
+        id: collect
+        if: steps.prepare.outputs.number != ''
+        env:
+          PR_NUMBER: ${{ steps.prepare.outputs.number }}
+          PR_HEAD: ${{ steps.prepare.outputs.head }}
+        run: python3 automation/version_sync.py collect
+
+  # 鍵を持つ。渡されたファイルを PR のブランチにコミットするだけで、PR の中身は取り出さない。
+  push:
+    needs: compute
+    if: needs.compute.outputs.payload != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: automerge
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: App のトークンで PR のブランチにコミットする
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAYLOAD: ${{ needs.compute.outputs.payload }}
+          AUTOMERGE_APP_ID: ${{ vars.AUTOMERGE_APP_ID }}
+          AUTOMERGE_APP_PRIVATE_KEY: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+        run: python3 automation/version_sync.py push
