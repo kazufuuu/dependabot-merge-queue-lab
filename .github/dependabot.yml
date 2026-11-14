@@ -115,13 +115,17 @@ updates:
   # 待機（cooldown）は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
   - package-ecosystem: docker
     directory: /versions
+    # コンテナイメージには、Dependabot のセキュリティ更新が無い。Python と Node のセキュリティの修正は、
+    # ふつうの patch として出る。速く追随するため、6 時間ごとに確かめ、python と node は待機から外す。
     schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
+      interval: cron
+      cronjob: "17 */6 * * *"
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
+      exclude:
+        - python
+        - node
     open-pull-requests-limit: 5
     assignees: [kazufusa]
     commit-message:

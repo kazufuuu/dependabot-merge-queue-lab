@@ -1,8 +1,20 @@
 {
-  "reviewers": ["kazufusa"],
+  "reviewers": [
+    "kazufusa"
+  ],
   "required_check": "all-green",
   "ci_workflow": "ci.yml",
-  "lockfiles": ["uv.lock", "package-lock.json", ".terraform.lock.hcl"],
+  "lockfiles": [
+    "uv.lock",
+    "package-lock.json",
+    ".terraform.lock.hcl"
+  ],
   "patch_group": "patch",
-  "dev_minor_group": "dev-minor"
+  "dev_minor_group": "dev-minor",
+  "sync_app": "kazufuuu-dependabot-automerge[bot]",
+  "sentinel": "versions/Dockerfile",
+  "runtime_files": {
+    "python": ".python-version",
+    "node": "web/.node-version"
+  }
 }

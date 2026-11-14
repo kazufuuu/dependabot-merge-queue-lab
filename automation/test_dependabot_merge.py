@@ -17,8 +17,12 @@ POLICY = Policy(
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
     patch_group="patch",
     dev_minor_group="dev-minor",
+    sync_app="sync-app[bot]",
+    sentinel="versions/Dockerfile",
+    runtime_files={"python": ".python-version", "node": "web/.node-version"},
 )
 DEV_MINOR = Policy(**{**POLICY.__dict__, "dev_minor": True})
+RUNTIME = Policy(**{**POLICY.__dict__, "runtime_patch": True})
 
 
 def message(*deps: dict) -> str:
@@ -49,7 +53,9 @@ def pr(**overrides) -> dict:
         "head": "aaa",
         "head_pushers": ["dependabot[bot]"],
         "labels": [],
-        "commits": [{"message": message(dep()), "author": "dependabot[bot]", "signed_by_github": True}],
+        "commits": [
+            {"message": message(dep()), "author": "dependabot[bot]", "signed_by_github": True, "pushers": ["dependabot[bot]"]}
+        ],
         "files": ["web/package-lock.json"],
         "files_truncated": False,
         "requested_reviewers": [],
@@ -174,7 +180,7 @@ def node(author: str, signature: dict | None) -> dict:
 
 class SignatureTest(unittest.TestCase):
     def signed(self, author: str, signature: dict | None) -> bool:
-        return normalize(node(author, signature), POLICY, ["dependabot[bot]"])["commits"][0]["signed_by_github"]
+        return normalize(node(author, signature), POLICY, {"aaa": ["dependabot[bot]"]})["commits"][0]["signed_by_github"]
 
     def test_commit_signed_by_github_counts(self):
         self.assertTrue(self.signed("dependabot[bot]", {"isValid": True, "wasSignedByGitHub": True}))
@@ -185,6 +191,87 @@ class SignatureTest(unittest.TestCase):
 
     def test_unsigned_commit_does_not_count(self):
         self.assertFalse(self.signed("dependabot[bot]", None))
+
+
+def runtime_pr(**overrides) -> dict:
+    """Dependabot が見張り役の python を上げ、版の同期が正本を積んだ PR。"""
+    first = {
+        "message": message(dep("python")),
+        "author": "dependabot[bot]",
+        "signed_by_github": True,
+        "pushers": ["dependabot[bot]"],
+    }
+    second = {"message": "版の正本を合わせる", "author": "sync-app[bot]", "signed_by_github": True, "pushers": ["sync-app[bot]"]}
+    base = {
+        "commits": [first, second],
+        "head_pushers": ["sync-app[bot]"],
+        "files": ["versions/Dockerfile", ".python-version"],
+    }
+    return pr(**{**base, **overrides})
+
+
+class RuntimePatchTest(unittest.TestCase):
+    def change(self, index: int, **fields) -> dict:
+        target = runtime_pr()
+        target["commits"][index] = {**target["commits"][index], **fields}
+        return target
+
+    def test_disabled_by_default(self):
+        self.assertFalse(classify(runtime_pr(), POLICY).auto)
+
+    def test_python_patch_with_sync_commit_is_auto_when_enabled(self):
+        self.assertTrue(classify(runtime_pr(), RUNTIME).auto)
+
+    def test_python_and_node_together_are_auto(self):
+        target = self.change(0, message=message(dep("python"), dep("node")))
+        target["files"] = ["versions/Dockerfile", ".python-version", "web/.node-version"]
+        self.assertTrue(classify(target, RUNTIME).auto)
+
+    def test_other_image_is_human(self):
+        target = self.change(0, message=message(dep("hashicorp/terraform")))
+        target["files"] = ["versions/Dockerfile", "infra/versions.tf"]
+        self.assertFalse(classify(target, RUNTIME).auto)
+
+    def test_minor_is_human(self):
+        target = self.change(0, message=message(dep("node", update="minor", group="minor")))
+        target["files"] = ["versions/Dockerfile", "web/.node-version"]
+        self.assertFalse(classify(target, RUNTIME).auto)
+
+    def test_extra_file_is_human(self):
+        files = ["versions/Dockerfile", ".python-version", ".github/workflows/ci.yml"]
+        self.assertFalse(classify(runtime_pr(files=files), RUNTIME).auto)
+
+    def test_file_of_another_runtime_is_human(self):
+        files = ["versions/Dockerfile", ".python-version", "web/.node-version"]
+        self.assertFalse(classify(runtime_pr(files=files), RUNTIME).auto)
+
+    def test_second_commit_by_human_is_human(self):
+        self.assertFalse(classify(self.change(1, author="mallory"), RUNTIME).auto)
+
+    def test_second_commit_unsigned_is_human(self):
+        self.assertFalse(classify(self.change(1, signed_by_github=False), RUNTIME).auto)
+
+    def test_head_pushed_by_human_is_human(self):
+        self.assertFalse(classify(runtime_pr(head_pushers=["mallory"]), RUNTIME).auto)
+        self.assertFalse(classify(runtime_pr(head_pushers=["sync-app[bot]", "mallory"]), RUNTIME).auto)
+
+    def test_first_commit_forged_is_human(self):
+        self.assertFalse(classify(self.change(0, signed_by_github=False), RUNTIME).auto)
+        self.assertFalse(classify(self.change(0, pushers=["mallory"]), RUNTIME).auto)
+
+    def test_security_update_is_human(self):
+        target = self.change(0, message=message(dep("python", group=None)))
+        self.assertFalse(classify(target, RUNTIME).auto)
+
+    def test_before_sync_the_pr_is_human(self):
+        target = runtime_pr()
+        target["commits"] = target["commits"][:1]
+        target["files"] = ["versions/Dockerfile"]
+        target["head_pushers"] = ["dependabot[bot]"]
+        self.assertFalse(classify(target, RUNTIME).auto)
+
+    def test_lockfile_patch_still_works_when_enabled(self):
+        self.assertTrue(classify(pr(), RUNTIME).auto)
 
 
 class PlanTest(unittest.TestCase):

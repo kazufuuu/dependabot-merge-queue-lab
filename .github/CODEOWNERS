@@ -7,3 +7,9 @@
 uv.lock
 package-lock.json
 .terraform.lock.hcl
+
+# Python と Node の公式イメージの patch を自動マージする切り替え（AUTOMERGE_RUNTIME_PATCH）を
+# 使うときだけ、次の 3 行を有効にする。所有者なしにしないと、App の承認では通らない。
+versions/Dockerfile
+.python-version
+web/.node-version

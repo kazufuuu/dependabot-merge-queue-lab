@@ -13,6 +13,11 @@
 - 更新の種別がすべて patch（設定で、開発用の依存の minor も足せる）
 - 必須の検査が、その head で成功している
 
+設定で足せる範囲が 2 つある。どちらも既定では無効。
+- 開発用の依存の minor（AUTOMERGE_DEV_MINOR）
+- Python と Node の公式イメージの patch（AUTOMERGE_RUNTIME_PATCH）。セキュリティの修正に速く追随するため。
+  この PR は、Dependabot のコミットに、版の同期が積んだコミットが 1 つ続く形になる
+
 条件を満たさない PR には、レビューを依頼してラベルを付ける。
 承認とマージキューへの投入は、専用の GitHub App のトークンで行う。
 """
@@ -51,7 +56,11 @@ class Policy:
     lockfiles: tuple[str, ...]
     patch_group: str
     dev_minor_group: str
+    sync_app: str
+    sentinel: str
+    runtime_files: dict[str, str]
     dev_minor: bool = False
+    runtime_patch: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,7 +105,11 @@ def load_policy(env: dict[str, str] | None = None) -> Policy:
         lockfiles=tuple(raw["lockfiles"]),
         patch_group=raw["patch_group"],
         dev_minor_group=raw["dev_minor_group"],
+        sync_app=raw["sync_app"],
+        sentinel=raw["sentinel"],
+        runtime_files=raw["runtime_files"],
         dev_minor=env.get("AUTOMERGE_DEV_MINOR", "").lower() == "true",
+        runtime_patch=env.get("AUTOMERGE_RUNTIME_PATCH", "").lower() == "true",
     )
 
 
@@ -132,8 +145,47 @@ def in_auto_scope(dep: dict[str, str], policy: Policy) -> bool:
     return False
 
 
+def runtime_patch_reasons(pr: dict, policy: Policy) -> list[str]:
+    """公式イメージの patch の PR として、自動マージできない理由を返す。空なら対象。
+
+    対象の形は 1 つだけ。Dependabot が見張り役を上げたコミットに、版の同期が積んだコミットが続く。
+    """
+    reasons: list[str] = []
+    first, second = pr["commits"]
+    if first["author"] != DEPENDABOT_COMMITTER or not first["signed_by_github"]:
+        reasons.append("1 つ目のコミットが Dependabot のものではありません")
+    if set(first["pushers"]) != {DEPENDABOT_COMMITTER}:
+        reasons.append("1 つ目のコミットを push したのが Dependabot ではありません")
+    if second["author"] != policy.sync_app or not second["signed_by_github"]:
+        reasons.append("2 つ目のコミットが、版の同期のものではありません")
+    if set(pr["head_pushers"]) != {policy.sync_app}:
+        reasons.append("head を push したのが、版の同期ではありません: " + ", ".join(sorted(pr["head_pushers"])))
+
+    deps = parse_updated_dependencies(first["message"])
+    if not deps:
+        reasons.append("更新のメタデータを読めません")
+    wanted = {policy.sentinel}
+    for dep in deps:
+        name = dep.get("dependency-name", "?")
+        if name not in policy.runtime_files:
+            reasons.append(f"{name}: 公式イメージの python と node 以外は人が見ます")
+        elif dep.get("dependency-group") != policy.patch_group or dep.get("update-type") != PATCH:
+            reasons.append(f"{name}: patch 以外は人が見ます")
+        else:
+            wanted.add(policy.runtime_files[name])
+    if pr["files_truncated"] or set(pr["files"]) != wanted:
+        reasons.append("変わったファイルが、見張り役と正本だけではありません: " + ", ".join(sorted(pr["files"])[:5]))
+    return reasons
+
+
 def classify(pr: dict, policy: Policy) -> Decision:
     """検査の結果を見る前に、自動マージの候補かどうかを決める。"""
+    if policy.runtime_patch and len(pr["commits"]) == 2:
+        runtime = runtime_patch_reasons(pr, policy)
+        if not runtime:
+            return Decision(auto=True)
+        # 当てはまらなければ、下のふつうの判定に進む（コミットが 2 つあるので、人が見ることになる）。
+
     reasons: list[str] = []
 
     commits = pr["commits"]
@@ -269,17 +321,19 @@ def check_state(rollup: dict | None, required_check: str) -> str:
     return "success" if all(run["conclusion"] == "SUCCESS" for run in runs) else "failure"
 
 
-def normalize(node: dict, policy: Policy, head_pushers: list[str]) -> dict:
+def normalize(node: dict, policy: Policy, pushers: dict[str, list[str]]) -> dict:
+    """GraphQL の結果を、判定に使う形にする。pushers は、コミットごとの、検査を起こした主体。"""
     commits = [c["commit"] for c in node["commits"]["nodes"]]
     reviews = node["latestReviews"]["nodes"]
     return {
         "number": node["number"],
         "head": node["headRefOid"],
-        "head_pushers": head_pushers,
+        "head_pushers": pushers.get(node["headRefOid"], []),
         "labels": [label["name"] for label in node["labels"]["nodes"]],
         "commits": [
             {
                 "message": c["message"],
+                "pushers": pushers.get(c["oid"], []),
                 "author": ((c["author"] or {}).get("user") or {}).get("login"),
                 "signed_by_github": bool(
                     c["signature"] and c["signature"]["isValid"] and c["signature"]["wasSignedByGitHub"]
@@ -287,7 +341,7 @@ def normalize(node: dict, policy: Policy, head_pushers: list[str]) -> dict:
             }
             for c in commits
         ]
-        + [{"message": "", "author": None, "signed_by_github": False}]
+        + [{"message": "", "pushers": [], "author": None, "signed_by_github": False}]
         * (node["commits"]["totalCount"] - len(commits)),
         "files": [f["path"] for f in node["files"]["nodes"]],
         "files_truncated": node["files"]["totalCount"] > len(node["files"]["nodes"]),
@@ -319,11 +373,15 @@ def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
         author = node["author"]
         if not author or author["__typename"] != "Bot" or author["login"] != DEPENDABOT_AUTHOR:
             continue
-        runs = gh(
-            "api", f"repos/{repo}/actions/workflows/{policy.ci_workflow}/runs?event=pull_request&head_sha={node['headRefOid']}",
-            "--jq", "[.workflow_runs[].actor.login]",
-        )  # fmt: skip
-        pulls.append(normalize(node, policy, json.loads(runs)))
+        pushers = {}
+        for commit in node["commits"]["nodes"][-2:]:
+            oid = commit["commit"]["oid"]
+            runs = gh(
+                "api", f"repos/{repo}/actions/workflows/{policy.ci_workflow}/runs?event=pull_request&head_sha={oid}",
+                "--jq", "[.workflow_runs[].actor.login]",
+            )  # fmt: skip
+            pushers[oid] = json.loads(runs)
+        pulls.append(normalize(node, policy, pushers))
     return pulls
 
 
@@ -413,7 +471,7 @@ def main() -> int:
         return 2
     repo = os.environ["GITHUB_REPOSITORY"]
     policy = load_policy()
-    print(f"policy: dev_minor={policy.dev_minor} reviewers={list(policy.reviewers)}")
+    print(f"policy: dev_minor={policy.dev_minor} runtime_patch={policy.runtime_patch} reviewers={list(policy.reviewers)}")
     token = None
     failed = False
     to_merge = 0
