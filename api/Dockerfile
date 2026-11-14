@@ -12,6 +12,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 RUN uv sync --locked --no-dev
+# slim のイメージに無い道具を使う。runner の上のテストは通るが、組み立ては落ちる。
+RUN gcc --version
 
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
