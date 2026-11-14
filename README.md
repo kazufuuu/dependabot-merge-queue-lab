@@ -125,7 +125,7 @@ Python、Node、Terraform の正本は、Dependabot が書き換えられませ�
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、版を写します
 - push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、正本の 3 つ（`.python-version`、`web/.node-version`、`infra/versions.tf`）に限っています
 - 対象は、Dependabot が push した、`versions/Dockerfile` だけを変える PR です
-- 版の記述が見つからない、2 か所ある、という場合は、何もせずに失敗します
+- 版の記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の検査も、見張り役と正本の食い違いで落ちたままになります
 
 Renovate は、`.python-version` や `.node-version` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、見張り役と同期の仕掛けで補っています。
 
@@ -164,7 +164,16 @@ python3 -m unittest discover -s automation                              # 振り
 scripts/build-api.sh -t api                                             # 本番のイメージ
 ```
 
-Python、Node、Terraform の版を手で上げるときは、`versions/Dockerfile` を書き換えてから `python3 automation/versions.py sync` を動かします。
+### 人が版を変えるとき
+
+ふだんの更新では、人はファイルを編集しません。レビューと承認だけを行います。
+minor や major を上げるなど、人が意図して版を変えるときは、次の 2 つを行います。
+
+1. 正本（`.python-version`、`web/.node-version`、`infra/versions.tf`）を書き換える
+2. `python3 automation/versions.py align` を動かす。見張り役が正本に揃う
+
+片方だけを直した PR は、検査（`automation/versions.py check`）が落とします。
+uv は、`pyproject.toml` の `uv==` を書き換えて `uv lock` を動かします。
 
 ## 設定の反映
 

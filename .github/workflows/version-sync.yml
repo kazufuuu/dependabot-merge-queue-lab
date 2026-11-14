@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       checks: read
       actions: read
     outputs:
@@ -40,6 +40,7 @@ jobs:
         id: collect
         if: steps.prepare.outputs.number != ''
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.prepare.outputs.number }}
           PR_HEAD: ${{ steps.prepare.outputs.head }}
         run: python3 automation/version_sync.py collect
@@ -53,7 +54,7 @@ jobs:
     environment: automerge
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       checks: read
       actions: read
     steps:

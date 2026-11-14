@@ -20,7 +20,8 @@ FROM なので、versions/Dockerfile を見張り役として置き、Dependabot
 使い方:
   versions.py show          正本の版を key=value で出す
   versions.py check         正本と見張り役が揃っていることを確かめる
-  versions.py sync          見張り役の版を正本へ写す
+  versions.py sync          見張り役の版を正本へ写す（Dependabot の PR に対して、workflow が動かす）
+  versions.py align         正本の版を見張り役へ写す（人が正本を書き換えたあとに動かす）
 """
 
 from __future__ import annotations
@@ -120,7 +121,10 @@ def check(root: Path) -> list[str]:
         return [str(error)]
     for name, version in wanted.items():
         if actual[name] != version:
-            errors.append(f"{name}: 正本は {actual[name]}、{SENTINEL} は {version}。versions.py sync で揃えてください")
+            errors.append(
+                f"{name}: 正本（{SOURCES[name]}）は {actual[name]}、{SENTINEL} は {version}。"
+                "正本を直したのなら versions.py align を、見張り役を直したのなら versions.py sync を動かしてください"
+            )
     for path in DOCKERFILES:
         for image in images_outside_docker_hub((root / path).read_text()):
             errors.append(f"{path} の {image} は Docker Hub のイメージではありません。待機が効きません")
@@ -143,9 +147,26 @@ def sync(root: Path) -> list[str]:
     return changed
 
 
+def align(root: Path) -> list[str]:
+    """正本の版を見張り役へ写す。人が意図して版を変えるときに使う。"""
+    actual = read_sources(root)
+    file = root / SENTINEL
+    text = file.read_text()
+    changed: list[str] = []
+    for name, image in IMAGES.items():
+        pattern = rf"^FROM\s+{re.escape(image)}:({VERSION})(?:-slim)?\s+AS\s+{name}\s*$"
+        match = one(pattern, text, f"{SENTINEL} の {name}")
+        if match.group(1) != actual[name]:
+            text = text[: match.start(1)] + actual[name] + text[match.end(1) :]
+            changed.append(name)
+    if changed:
+        file.write_text(text)
+    return changed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("show", "check", "sync"))
+    parser.add_argument("command", choices=("show", "check", "sync", "align"))
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     args = parser.parse_args()
     try:
@@ -155,6 +176,9 @@ def main() -> int:
         elif args.command == "sync":
             for path in sync(args.root):
                 print(path)
+        elif args.command == "align":
+            for name in align(args.root):
+                print(f"{SENTINEL}: {name}")
         else:
             errors = check(args.root)
             for message in errors:

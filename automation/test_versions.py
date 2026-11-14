@@ -69,6 +69,19 @@ class VersionsTest(unittest.TestCase):
         expected = before.replace(f'required_version = "= {old}"', 'required_version = "= 1.99.1"')
         self.assertEqual((self.root / versions.TERRAFORM_FILE).read_text(), expected)
 
+    def test_align_copies_sources_to_sentinel(self):
+        (self.root / versions.PYTHON_VERSION_FILE).write_text("3.13.99\n")
+        (self.root / versions.NODE_VERSION_FILE).write_text("24.99.1\n")
+        self.assertEqual(len(versions.check(self.root)), 2)
+        self.assertEqual(versions.align(self.root), ["python", "node"])
+        self.assertEqual(versions.check(self.root), [])
+        sentinel = versions.read_sentinel(self.root)
+        self.assertEqual((sentinel["python"], sentinel["node"]), ("3.13.99", "24.99.1"))
+        self.assertIn("FROM python:3.13.99-slim AS python", (self.root / versions.SENTINEL).read_text())
+
+    def test_align_without_change_writes_nothing(self):
+        self.assertEqual(versions.align(self.root), [])
+
     def test_sync_without_change_writes_nothing(self):
         self.assertEqual(versions.sync(self.root), [])
 

@@ -88,7 +88,11 @@ def prepare(repo: str) -> None:
     pr = candidates[0]
     subprocess.run(["git", "fetch", "--quiet", "--depth", "1", "origin", pr["head"]], check=True)
     subprocess.run(["git", "worktree", "add", "--quiet", "--detach", str(WORKTREE), pr["head"]], check=True)
-    changed = versions.sync(WORKTREE)
+    try:
+        changed = versions.sync(WORKTREE)
+    except versions.VersionError as error:
+        report_failure(repo, str(pr["number"]), error)
+        raise
     print(f"#{pr['number']}: 正本へ写したファイル: {changed or 'なし'}")
     write_output(number=str(pr["number"]) if changed else "", head=pr["head"])
 
@@ -140,21 +144,41 @@ def push(repo: str, payload: dict) -> None:
     print(f"#{number}: {commit[:7]} を積みました（{sorted(files)}）")
 
 
+def report_failure(repo: str, number: str, error: Exception) -> None:
+    """失敗を PR に残す。人が何を直せばよいかを書く。"""
+    body = (
+        "版の同期に失敗しました。この PR は、見張り役（`versions/Dockerfile`）と正本が食い違ったままです。\n\n"
+        f"- 理由: {error}\n"
+        "- 直し方: この PR のブランチで `python3 automation/versions.py sync` を動かし、結果をコミットしてください。"
+        "スクリプトが版の記述を見つけられない場合は、理由に出ているファイルを確かめてください"
+    )
+    try:
+        gh("pr", "comment", number, "--repo", repo, "--body", body)
+    except RuntimeError as comment_error:
+        print(f"::warning::#{number} にコメントできませんでした: {comment_error}")
+
+
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     repo = os.environ["GITHUB_REPOSITORY"]
+    number = ""
     try:
         if mode == "prepare":
             prepare(repo)
         elif mode == "collect":
-            collect(os.environ["PR_NUMBER"], os.environ["PR_HEAD"])
+            number = os.environ["PR_NUMBER"]
+            collect(number, os.environ["PR_HEAD"])
         elif mode == "push":
-            push(repo, decode(os.environ["PAYLOAD"]))
+            payload = decode(os.environ["PAYLOAD"])
+            number = str(payload["number"])
+            push(repo, payload)
         else:
             print("usage: version_sync.py [prepare|collect|push]")
             return 2
     except (SyncError, versions.VersionError, RuntimeError) as error:
         print(f"::error::{error}")
+        if number:
+            report_failure(repo, number, error)
         return 1
     return 0
 
