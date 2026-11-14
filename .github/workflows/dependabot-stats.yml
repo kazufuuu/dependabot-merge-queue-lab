@@ -1,0 +1,26 @@
+name: dependabot-stats
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 集計する日数
+        default: "7"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Dependabot の PR を数える
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAYS: ${{ inputs.days || '7' }}
+        run: python3 automation/dependabot_stats.py --days "$DAYS" | tee -a "$GITHUB_STEP_SUMMARY"

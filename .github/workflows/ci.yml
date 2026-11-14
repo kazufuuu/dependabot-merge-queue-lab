@@ -5,6 +5,8 @@ on:
   merge_group:
   push:
     branches: [main]
+  # マージキューの組の検査を、振り分けの workflow から起動するために使う。
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -56,18 +58,20 @@ jobs:
           tf validate
           tf test
 
-  versions:
+  automation:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: 自動マージの判定のテスト
+        run: python3 -m unittest discover -s automation -v
       - name: 版の書かれた場所がそろっていることを確かめる
         run: python3 automation/check_versions.py
 
   # 必須の検査はこの 1 つだけにする。上の検査がすべて成功したときだけ成功する。
   all-green:
     if: always()
-    needs: [workspace, api, web, infra, versions]
+    needs: [workspace, api, web, infra, automation]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
