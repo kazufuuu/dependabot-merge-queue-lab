@@ -1,0 +1,81 @@
+name: ci
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: ワークスペースの lint とテストを、Dockerfile の版で動かす
+        run: docker build --target test .
+
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: テストを Dockerfile の版で動かす
+        run: docker build --target test api
+      - name: 実行用のイメージを組み立てて起動する
+        run: |
+          docker build -t api api
+          docker run --rm api
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: 型検査とテストを Dockerfile の版で動かす
+        run: docker build --target test web
+
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Terraform を Dockerfile の版で動かす
+        run: |
+          docker build -t terraform tools/terraform
+          tf() { docker run --rm -v "$PWD/infra:/work" -w /work terraform "$@"; }
+          tf fmt -check -diff
+          tf init -backend=false -input=false -lockfile=readonly
+          tf validate
+          tf test
+
+  versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: 版の書かれた場所がそろっていることを確かめる
+        run: python3 automation/check_versions.py
+
+  # 必須の検査はこの 1 つだけにする。上の検査がすべて成功したときだけ成功する。
+  all-green:
+    if: always()
+    needs: [workspace, api, web, infra, versions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: すべての検査の結果を確かめる
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for result in $RESULTS; do
+            test "$result" = success
+          done

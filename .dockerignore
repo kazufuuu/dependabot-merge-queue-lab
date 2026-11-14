@@ -1,0 +1,8 @@
+.git
+.handoff
+.venv
+**/__pycache__
+**/node_modules
+api
+web
+infra
