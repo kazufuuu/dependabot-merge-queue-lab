@@ -4,5 +4,5 @@
 # イメージは Docker Hub のものに限る。待機（cooldown）が Docker Hub にしか効かないため。
 FROM python:3.13.16-slim AS python
 FROM astral/uv:0.13.5 AS uv
-FROM node:24.20.0-slim AS node
-FROM hashicorp/terraform:1.16.5 AS terraform
+FROM node:24.22.2-slim AS node
+FROM hashicorp/terraform:1.17.1 AS terraform
