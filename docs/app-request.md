@@ -211,7 +211,7 @@ App がしないことは次のとおりです。
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、ruleset を無効にし、push し、すぐ有効に戻しました。回数は 7 回です（2026-11-14）。無効の時間は、それぞれ数秒です。
+そのため、main の変更のたびに、ruleset を無効にし、push し、すぐ有効に戻しました。回数は 8 回です（2026-11-14）。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
 人が 2 人以上いる組織では、この操作は要りません。ruleset に迂回できる主体は登録していません。
 
@@ -237,7 +237,8 @@ Docker Hub 以外で効かない理由は、Dependabot の実装にあります�
 自動マージの対象になるのは、ロックファイルだけを変える更新です。配布元は PyPI、npm、Terraform のレジストリの 3 つです。
 コンテナイメージと GitHub Actions の更新は、版を書いたファイルが変わるので、待機が効くかどうかに関係なく、所有者のレビューを通ります。
 
-コンテナイメージは Docker Hub のものを使う決まりにしました。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/check_versions.py`）が落ちます。
+コンテナイメージは Docker Hub のものを使う決まりにしました。
+uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、待機を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/check_versions.py`）が落ちます。
 Docker Hub に無いイメージを使うときは、待機が効かないと承知したうえで、人のレビューで守ります。
 Docker Hub には、認証なしで取得できる回数に制限があります。検査が取得で失敗するようになったら、認証を足します。
 
