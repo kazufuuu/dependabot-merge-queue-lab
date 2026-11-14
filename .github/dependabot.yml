@@ -1,0 +1,164 @@
+# 版は範囲で書き、範囲の中に収まる更新ではロックファイルだけが変わるようにする。
+# npm は versioning-strategy: increase-if-necessary でそうなる。
+# uv はこの値が効かないので、指定しない。pyproject.toml の [project] に description があり、
+# その名前が PyPI に無いと、Dependabot はライブラリとみなして範囲を広げる方針を選ぶ。
+# この方針では、範囲の中の更新は uv.lock だけが変わり、範囲を超える更新は pyproject.toml も変わる。
+# グループは semver の種別で分ける。patch のグループだけが自動マージの対象になる。
+# major はグループに入れず、依存ごとに 1 本ずつ出す。
+# セキュリティ更新はグループに入れない。待機もかからず、依存ごとにすぐ出る。
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      dev-minor:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor]
+      minor:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor]
+
+  - package-ecosystem: uv
+    directory: /api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      dev-minor:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor]
+      minor:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor]
+
+  - package-ecosystem: npm
+    directory: /web
+    versioning-strategy: increase-if-necessary
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      dev-minor:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor]
+      minor:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor]
+
+  - package-ecosystem: terraform
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      minor:
+        applies-to: version-updates
+        update-types: [minor]
+
+  # ランタイムと道具の版は Dockerfile の FROM で決める。
+  # 同じイメージを全部の Dockerfile で一度に上げるため、ディレクトリをまとめる。
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /api
+      - /web
+      - /tools/terraform
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      minor:
+        applies-to: version-updates
+        update-types: [minor]
+    ignore:
+      # ランタイムの minor と major は、対応する版のファイルと合わせて人が上げる。
+      - dependency-name: python
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    assignees: [kazufusa]
+    commit-message:
+      prefix: deps
+    groups:
+      patch:
+        applies-to: version-updates
+        update-types: [patch]
+      minor:
+        applies-to: version-updates
+        update-types: [minor]
