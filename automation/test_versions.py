@@ -39,7 +39,14 @@ class VersionsTest(unittest.TestCase):
         self.assertEqual(versions.check(REPO), [])
 
     def test_sources_and_sentinel_agree(self):
-        self.assertEqual(versions.read_sources(self.root), versions.read_sentinel(self.root))
+        actual = versions.read_sources(self.root)
+        self.assertEqual({name: actual[name] for name in versions.IMAGES}, versions.read_sentinel(self.root))
+
+    def test_uv_is_read_from_the_dev_dependency(self):
+        self.edit("pyproject.toml", f'"uv=={versions.read_sources(self.root)["uv"]}"', '"uv==0.99.1"')
+        self.assertEqual(versions.read_sources(self.root)["uv"], "0.99.1")
+        # uv は Dependabot が直接上げるので、見張り役とは比べない。
+        self.assertTrue(all("uv:" not in error for error in versions.check(self.root)))
 
     def test_check_reports_sentinel_ahead_of_sources(self):
         self.bump_sentinel("python", "3.13.99")
@@ -48,7 +55,8 @@ class VersionsTest(unittest.TestCase):
         self.assertIn("python", errors[0])
 
     def test_sync_copies_every_version(self):
-        for name, new in {"python": "3.13.99", "uv": "0.99.1", "node": "24.99.1", "terraform": "1.99.1"}.items():
+        uv = versions.read_sources(self.root)["uv"]
+        for name, new in {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1"}.items():
             self.bump_sentinel(name, new)
         changed = versions.sync(self.root)
         self.assertEqual(
@@ -56,15 +64,15 @@ class VersionsTest(unittest.TestCase):
         )
         self.assertEqual(
             versions.read_sources(self.root),
-            {"python": "3.13.99", "uv": "0.99.1", "node": "24.99.1", "terraform": "1.99.1"},
+            {"python": "3.13.99", "uv": uv, "node": "24.99.1", "terraform": "1.99.1"},
         )
 
     def test_sync_changes_nothing_else(self):
         before = {path: (self.root / path).read_text() for path in versions.PYPROJECTS}
-        old = self.bump_sentinel("uv", "0.99.1")
+        old = self.bump_sentinel("python", "3.13.99")
         versions.sync(self.root)
         for path, text in before.items():
-            expected = text.replace(f'required-version = "=={old}"', 'required-version = "==0.99.1"')
+            expected = text.replace(f'requires-python = "=={old}"', 'requires-python = "==3.13.99"')
             self.assertEqual((self.root / path).read_text(), expected)
 
     def test_sync_without_change_writes_nothing(self):
@@ -91,7 +99,7 @@ class VersionsTest(unittest.TestCase):
             versions.read_sources(self.root)
 
     def test_missing_sentinel_stage_fails(self):
-        self.edit(versions.SENTINEL, " AS uv", " AS tool")
+        self.edit(versions.SENTINEL, " AS node", " AS tool")
         with self.assertRaises(versions.VersionError):
             versions.read_sentinel(self.root)
 
@@ -102,7 +110,7 @@ class VersionsTest(unittest.TestCase):
             versions.read_sentinel(self.root)
 
     def test_image_outside_docker_hub_is_reported(self):
-        self.edit(versions.SENTINEL, "FROM astral/uv:", "FROM ghcr.io/astral-sh/uv:")
+        self.edit(versions.SENTINEL, "FROM hashicorp/terraform:", "FROM ghcr.io/hashicorp/terraform:")
         text = (self.root / versions.SENTINEL).read_text()
         self.assertEqual(len(versions.images_outside_docker_hub(text)), 1)
 

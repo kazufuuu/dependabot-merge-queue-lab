@@ -3,12 +3,16 @@
 版の正本は、それぞれの道具が自分で読む場所に置く。
 
 - Python: pyproject.toml の requires-python（uv が読む）
-- uv: pyproject.toml の [tool.uv] required-version（uv が読む）
+- uv: pyproject.toml の開発用の依存 uv==（uv.lock に入り、setup-uv が uv.lock から読む）
 - Node: web/.node-version（setup-node や手元の版管理の道具が読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
 
-Dependabot は、これらの場所を書き換えられない。書き換えられるのは Dockerfile の FROM なので、
-versions/Dockerfile を見張り役として置き、Dependabot にはそこを上げさせる。
+uv は PyPI のパッケージなので、Dependabot が直接上げる。
+[tool.uv] required-version は 1 点に固定しない。Dependabot の中の uv と違う版に固定すると、
+Dependabot の更新が tool_version_not_supported で失敗するため。
+
+Python、Node、Terraform の正本は、Dependabot が書き換えられない。書き換えられるのは Dockerfile の
+FROM なので、versions/Dockerfile を見張り役として置き、Dependabot にはそこを上げさせる。
 このスクリプトの sync は、見張り役の版を正本へ写すだけを行う。新しい版は探さない。
 
 使い方:
@@ -34,7 +38,6 @@ DOCKERFILES = (SENTINEL, "api/Dockerfile")
 # 見張り役の FROM に書くイメージ。段の名前が、版の名前になる。
 IMAGES = {
     "python": "python",
-    "uv": "astral/uv",
     "node": "node",
     "terraform": "hashicorp/terraform",
 }
@@ -56,15 +59,20 @@ def one(pattern: str, text: str, where: str) -> re.Match[str]:
 
 PATTERNS = {
     "python": rf'^requires-python\s*=\s*"==({VERSION})"\s*$',
-    "uv": rf'^required-version\s*=\s*"==({VERSION})"\s*$',
+    "uv": rf'^\s*"uv==({VERSION})",?\s*$',
     "node": rf"^({VERSION})\s*$",
     "terraform": rf'^\s*required_version\s*=\s*"=\s*({VERSION})"\s*$',
 }
 
 
 def sources(name: str) -> tuple[str, ...]:
-    """その版の正本のファイル。Python と uv は、2 つのプロジェクトに同じ値を書く。"""
-    return {"python": PYPROJECTS, "uv": PYPROJECTS, "node": (NODE_VERSION_FILE,), "terraform": (TERRAFORM_FILE,)}[name]
+    """その版の正本のファイル。Python は、2 つのプロジェクトに同じ値を書く。"""
+    return {
+        "python": PYPROJECTS,
+        "uv": (PYPROJECTS[0],),
+        "node": (NODE_VERSION_FILE,),
+        "terraform": (TERRAFORM_FILE,),
+    }[name]
 
 
 def read_sources(root: Path) -> dict[str, str]:
@@ -130,7 +138,8 @@ def sync(root: Path) -> list[str]:
     """見張り役の版を正本へ写す。書き換えたファイルを返す。"""
     wanted = read_sentinel(root)
     changed: list[str] = []
-    for name, pattern in PATTERNS.items():
+    for name in wanted:
+        pattern = PATTERNS[name]
         for path in sources(name):
             file = root / path
             text = file.read_text()

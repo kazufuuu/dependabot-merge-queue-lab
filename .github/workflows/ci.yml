@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # テストは runner の上で直接動かす。版は正本から読む。
-# - Python と uv: pyproject.toml（setup-uv と uv が読む）
+# - Python: pyproject.toml の requires-python（uv が読む）
+# - uv: pyproject.toml の開発用の依存 uv==（setup-uv が uv.lock から読む）
 # - Node: web/.node-version（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
 jobs:
@@ -25,8 +26,11 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          version-file: uv.lock
           enable-cache: true
           cache-python: true
+      - name: uv の版が正本と同じことを確かめる
+        run: test "$(uv --version | cut -d' ' -f2)" = "$(python3 automation/versions.py show | sed -n 's/^uv=//p')"
       - run: uv sync --locked --all-packages
       - run: uv run --no-sync ruff check
       - run: uv run --no-sync pytest
@@ -42,6 +46,7 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           working-directory: api
+          version-file: uv.lock
           enable-cache: true
           cache-python: true
       - run: uv sync --locked
