@@ -1,10 +1,19 @@
 import unittest
 
-from dependabot_merge import LABEL_AUTO, LABEL_HUMAN, Policy, classify, parse_updated_dependencies, plan_for
+from dependabot_merge import (
+    LABEL_AUTO,
+    LABEL_HUMAN,
+    Policy,
+    classify,
+    normalize,
+    parse_updated_dependencies,
+    plan_for,
+)
 
 POLICY = Policy(
     reviewers=("alice",),
     required_check="all-green",
+    ci_workflow="ci.yml",
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
     patch_group="patch",
     dev_minor_group="dev-minor",
@@ -38,6 +47,7 @@ def pr(**overrides) -> dict:
     base = {
         "number": 1,
         "head": "aaa",
+        "head_pushers": ["dependabot[bot]"],
         "labels": [],
         "commits": [{"message": message(dep()), "author": "dependabot[bot]", "signed_by_github": True}],
         "files": ["web/package-lock.json"],
@@ -123,12 +133,58 @@ class ClassifyTest(unittest.TestCase):
         good = {"message": message(dep()), "author": "dependabot[bot]", "signed_by_github": True}
         self.assertFalse(classify(pr(commits=[good, good]), POLICY).auto)
 
+    def test_dependabot_commit_pushed_by_human_is_human(self):
+        decision = classify(pr(head_pushers=["mallory"]), POLICY)
+        self.assertFalse(decision.auto)
+        self.assertIn("mallory", decision.reasons[0])
+
+    def test_reopened_by_human_is_human(self):
+        self.assertFalse(classify(pr(head_pushers=["dependabot[bot]", "mallory"]), POLICY).auto)
+
+    def test_unknown_pusher_with_finished_check_is_human(self):
+        self.assertFalse(classify(pr(head_pushers=[]), POLICY).auto)
+
+    def test_unknown_pusher_while_check_is_pending_waits(self):
+        self.assertTrue(classify(pr(head_pushers=[], check="pending"), POLICY).auto)
+
     def test_missing_metadata_is_human(self):
         commit = {"message": "bump", "author": "dependabot[bot]", "signed_by_github": True}
         self.assertFalse(classify(pr(commits=[commit]), POLICY).auto)
 
     def test_too_many_files_is_human(self):
         self.assertFalse(classify(pr(files_truncated=True), POLICY).auto)
+
+
+def node(author: str, signature: dict | None) -> dict:
+    """GraphQL が返す PR の形。コミットの作者と署名だけを変えられる。"""
+    commit = {"oid": "aaa", "message": message(dep()), "author": {"user": {"login": author}}, "signature": signature}
+    return {
+        "number": 1,
+        "headRefOid": "aaa",
+        "labels": {"nodes": []},
+        "reviewRequests": {"nodes": []},
+        "latestReviews": {"nodes": []},
+        "commits": {"totalCount": 1, "nodes": [{"commit": commit}]},
+        "statusCheckRollup": None,
+        "files": {"totalCount": 1, "nodes": [{"path": "uv.lock"}]},
+        "mergeQueueEntry": None,
+        "autoMergeRequest": None,
+    }
+
+
+class SignatureTest(unittest.TestCase):
+    def signed(self, author: str, signature: dict | None) -> bool:
+        return normalize(node(author, signature), POLICY, ["dependabot[bot]"])["commits"][0]["signed_by_github"]
+
+    def test_commit_signed_by_github_counts(self):
+        self.assertTrue(self.signed("dependabot[bot]", {"isValid": True, "wasSignedByGitHub": True}))
+
+    def test_commit_signed_with_a_personal_key_does_not_count(self):
+        # 作者を Dependabot と偽り、人が自分の鍵で署名したコミット。署名は有効でも対象にしない。
+        self.assertFalse(self.signed("dependabot[bot]", {"isValid": True, "wasSignedByGitHub": False}))
+
+    def test_unsigned_commit_does_not_count(self):
+        self.assertFalse(self.signed("dependabot[bot]", None))
 
 
 class PlanTest(unittest.TestCase):

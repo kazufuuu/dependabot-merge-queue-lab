@@ -17,6 +17,27 @@ def from_versions(dockerfile: str, image: str) -> list[str]:
     return pattern.findall((ROOT / dockerfile).read_text())
 
 
+DOCKERFILES = ("Dockerfile", "api/Dockerfile", "web/Dockerfile", "tools/terraform/Dockerfile")
+
+
+def images_outside_docker_hub(dockerfile: str) -> list[str]:
+    """Docker Hub 以外から取るイメージを返す。
+
+    Dependabot の待機（cooldown）は、Docker Hub のイメージにしか効かない。
+    ほかのレジストリでは公開日を取れず、公開直後の版がそのまま提案される。
+    """
+    stages = set(re.findall(r"^FROM\s+\S+\s+AS\s+(\S+)", (ROOT / dockerfile).read_text(), re.MULTILINE))
+    images = re.findall(r"^FROM\s+(?:--\S+\s+)*(\S+)", (ROOT / dockerfile).read_text(), re.MULTILINE)
+    outside = []
+    for image in images:
+        if image in stages or image == "scratch":
+            continue
+        first = image.split("/")[0]
+        if "/" in image and ("." in first or ":" in first or first == "localhost"):
+            outside.append(image)
+    return outside
+
+
 def minor(version: str) -> str:
     return ".".join(version.split(".")[:2])
 
@@ -28,10 +49,14 @@ def main() -> int:
         if not condition:
             errors.append(message)
 
+    for dockerfile in DOCKERFILES:
+        for image in images_outside_docker_hub(dockerfile):
+            check(False, f"{dockerfile} の {image} は Docker Hub のイメージではありません。待機が効きません")
+
     python = {f: from_versions(f, "python") for f in ("Dockerfile", "api/Dockerfile")}
     all_python = {v for versions in python.values() for v in versions}
     check(len(all_python) == 1, f"python の FROM がそろっていません: {python}")
-    uv = {f: from_versions(f, "ghcr.io/astral-sh/uv") for f in ("Dockerfile", "api/Dockerfile")}
+    uv = {f: from_versions(f, "astral/uv") for f in ("Dockerfile", "api/Dockerfile")}
     check(len({v for vs in uv.values() for v in vs}) == 1, f"uv の FROM がそろっていません: {uv}")
 
     for version in all_python:

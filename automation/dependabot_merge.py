@@ -4,7 +4,9 @@
 何度動かしても結果が変わらないように作ってある。
 
 自動マージの条件（すべて満たすこと）
-- PR の作成者が Dependabot で、コミットが Dependabot の署名付きの 1 つだけ
+- PR の作成者が Dependabot で、コミットが 1 つだけ
+- そのコミットの作者が Dependabot で、GitHub 自身の鍵で署名されている
+- その head を push したのが Dependabot である（人が push し直したコミットは、中身が本物でも対象外）
 - 変わったファイルがロックファイルだけ
 - 更新がすべて、自動マージの対象のグループに属している
   （セキュリティ更新はグループに属さないので、対象にならない）
@@ -45,6 +47,7 @@ DEPENDABOT_COMMITTER = "dependabot[bot]"  # コミットの作者
 class Policy:
     reviewers: tuple[str, ...]
     required_check: str
+    ci_workflow: str
     lockfiles: tuple[str, ...]
     patch_group: str
     dev_minor_group: str
@@ -89,6 +92,7 @@ def load_policy(env: dict[str, str] | None = None) -> Policy:
     return Policy(
         reviewers=tuple(raw["reviewers"]),
         required_check=raw["required_check"],
+        ci_workflow=raw["ci_workflow"],
         lockfiles=tuple(raw["lockfiles"]),
         patch_group=raw["patch_group"],
         dev_minor_group=raw["dev_minor_group"],
@@ -139,6 +143,14 @@ def classify(pr: dict, policy: Policy) -> Decision:
         if commit["author"] != DEPENDABOT_COMMITTER or not commit["signed_by_github"]:
             reasons.append("Dependabot の署名の無いコミットがあります")
             break
+
+    # head の検査を起こした主体は、その head を push した主体と同じになる。
+    # 過去の本物のコミットを人が別のブランチへ持ってきた場合を、ここで弾く。
+    pushers = set(pr["head_pushers"])
+    if pushers - {DEPENDABOT_COMMITTER}:
+        reasons.append("head を push したのが Dependabot ではありません: " + ", ".join(sorted(pushers)))
+    elif not pushers and pr["check"] != "pending":
+        reasons.append("head を push した主体を確かめられません")
 
     other_files = [p for p in pr["files"] if p.rsplit("/", 1)[-1] not in policy.lockfiles]
     if pr["files_truncated"]:
@@ -257,12 +269,13 @@ def check_state(rollup: dict | None, required_check: str) -> str:
     return "success" if all(run["conclusion"] == "SUCCESS" for run in runs) else "failure"
 
 
-def normalize(node: dict, policy: Policy) -> dict:
+def normalize(node: dict, policy: Policy, head_pushers: list[str]) -> dict:
     commits = [c["commit"] for c in node["commits"]["nodes"]]
     reviews = node["latestReviews"]["nodes"]
     return {
         "number": node["number"],
         "head": node["headRefOid"],
+        "head_pushers": head_pushers,
         "labels": [label["name"] for label in node["labels"]["nodes"]],
         "commits": [
             {
@@ -301,11 +314,17 @@ def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
     owner, name = repo.split("/")
     out = gh("api", "graphql", "-f", f"query={QUERY}", "-f", f"owner={owner}", "-f", f"name={name}")
     nodes = json.loads(out)["data"]["repository"]["pullRequests"]["nodes"]
-    return [
-        normalize(node, policy)
-        for node in nodes
-        if node["author"] and node["author"]["__typename"] == "Bot" and node["author"]["login"] == DEPENDABOT_AUTHOR
-    ]
+    pulls = []
+    for node in nodes:
+        author = node["author"]
+        if not author or author["__typename"] != "Bot" or author["login"] != DEPENDABOT_AUTHOR:
+            continue
+        runs = gh(
+            "api", f"repos/{repo}/actions/workflows/{policy.ci_workflow}/runs?event=pull_request&head_sha={node['headRefOid']}",
+            "--jq", "[.workflow_runs[].actor.login]",
+        )  # fmt: skip
+        pulls.append(normalize(node, policy, json.loads(runs)))
+    return pulls
 
 
 def apply_triage(plan: Plan, repo: str) -> None:
