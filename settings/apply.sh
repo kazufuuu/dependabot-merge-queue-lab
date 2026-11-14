@@ -27,10 +27,14 @@ fi
 gh api -X PUT "repos/$repo/vulnerability-alerts"
 gh api -X PUT "repos/$repo/automated-security-fixes"
 
-id="$(gh api "repos/$repo/rulesets" --jq '.[] | select(.name == "main") | .id')"
-if [ -n "$id" ]; then
-  gh api -X PUT "repos/$repo/rulesets/$id" --input "$dir/ruleset.json" >/dev/null
-else
-  gh api -X POST "repos/$repo/rulesets" --input "$dir/ruleset.json" >/dev/null
-fi
+# main の保護と、タグの保護。タグは管理者だけが作れる。
+for file in ruleset.json ruleset-tags.json; do
+  name="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["name"])' "$dir/$file")"
+  id="$(gh api "repos/$repo/rulesets" --jq ".[] | select(.name == \"$name\") | .id")"
+  if [ -n "$id" ]; then
+    gh api -X PUT "repos/$repo/rulesets/$id" --input "$dir/$file" >/dev/null
+  else
+    gh api -X POST "repos/$repo/rulesets" --input "$dir/$file" >/dev/null
+  fi
+done
 echo "applied to $repo"

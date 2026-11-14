@@ -50,7 +50,8 @@ ruleset は所有者のレビューを必須にしているので、workflow の
 CI が終わったとき、毎時、手動の 3 通りで動きます。判定は `automation/dependabot_merge.py` にあります。
 
 - 判定は main の版で動きます。PR の中身は実行しません
-- 種別は、Dependabot がコミットメッセージに書くメタデータで判定します。コミットに Dependabot の署名があることも確かめます
+- 種別は、Dependabot がコミットメッセージに書くメタデータで判定します
+- コミットが GitHub 自身の鍵で署名されていることと、その head を push したのが Dependabot であることを確かめます。作者の欄は自由に書けるので、判断に使いません
 - 人が見る PR には、`needs-review` ラベルと理由のコメントを付け、レビューを依頼します
 - 自動マージする PR には、検査が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
 - マージキューの検査で外された PR も、人に依頼します
@@ -72,12 +73,32 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 ランタイムと道具の版は、Dockerfile の `FROM` の 1 か所で決めます。Dependabot が書き換えられる場所だからです。
 
 - Python、Node、uv、Terraform 本体の版は `FROM` に書く
+- イメージは Docker Hub のものを使う。待機が Docker Hub のイメージにしか効かないため。ほかのレジストリのイメージを `FROM` に書くと、検査が落ちる
 - `.python-version`、`.node-version`、`requires-python`、`engines` は minor までにとどめる
 - `automation/check_versions.py` が、`FROM` とのずれを検査で見つける
 
+### 待機
+
+`cooldown` を 7 日にしています。公開から 7 日たつまで、その版は提案されません。
+ただし、効く配布元と効かない配布元があります。設定は受け付けられ、警告も出ません。
+
+| 配布元 | 待機 | 自動マージの対象に入るか |
+|---|---|---|
+| PyPI | 効く | 入る（`uv.lock`） |
+| npm | 効く | 入る（`package-lock.json`） |
+| Terraform のレジストリ | 効く | 入る（`.terraform.lock.hcl`） |
+| Docker Hub のイメージ | 効く | 入らない。Dockerfile が変わる |
+| Docker Hub 以外のイメージ | 効かない | 入らない。検査が `FROM` に書くことを止める |
+| GitHub Actions | 効く。日数はタグが指すコミットの日付で数える | 入らない。workflow のファイルが変わる |
+| セキュリティ更新 | かからない | 入らない |
+
+待機は、悪意のある版が発覚するまでの時間を取るものです。防ぐものではありません。
+確かめ方と実例は [docs/app-request.md](docs/app-request.md) の「待機の効く範囲」にあります。
+
 ## 設定の反映
 
-`settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset（`settings/ruleset.json`）を反映します。
+`settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。
+ruleset は、main の保護（`settings/ruleset.json`）と、タグの保護（`settings/ruleset-tags.json`）の 2 つです。
 GitHub App は `settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
 App の作成をほかの部門に頼むときの依頼書は [docs/app-request.md](docs/app-request.md) です。
 
@@ -92,4 +113,5 @@ App の作成をほかの部門に頼むときの依頼書は [docs/app-request.
 - Dockerfile の `FROM`、Actions の `uses:`、`==` で固定した依存には、ロックファイルがありません。patch の更新でも版を書いたファイルが変わるので、人の承認が要ります
 - Dependabot は、依存ごとに最新の版だけを提案します。範囲を超える版が出ている依存では、範囲の中の patch は提案されません
 - uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります
+- 人が 1 人だけの組織では、ruleset を入れたあとに main を変える手段がありません。自分の PR を自分で承認できないためです。この検証では、main の変更のたびに ruleset を一時的に無効にしました
 - App は CODEOWNERS の所有者になれません。App の承認で通るのは、所有者のいないロックファイルだけを変える PR です

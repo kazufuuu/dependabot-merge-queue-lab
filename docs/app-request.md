@@ -25,6 +25,8 @@
 | workflow | リポジトリに置いた自動処理（GitHub Actions） |
 | `GITHUB_TOKEN` | workflow に自動で渡る、そのリポジトリ用の一時的な権限 |
 | environment | secret の置き場所。使えるブランチを絞れる |
+| 待機（cooldown） | Dependabot の設定。公開から決めた日数がたつまで、その版を提案しない |
+| ruleset | ブランチやタグの保護の決まり。レビューや検査を必須にする |
 
 ## 目的
 
@@ -87,10 +89,20 @@ App のトークンを使うのは、リポジトリの workflow `dependabot-mer
 この job は、次の条件をすべて満たす PR だけを承認し、マージキューに入れます。
 
 1. PR の作成者が Dependabot である
-2. コミットが 1 つだけで、Dependabot が作り、GitHub の署名が付いている
-3. 変わったファイルがロックファイルだけである
-4. 更新がすべて patch のグループに属している。脆弱性の修正として出る更新（セキュリティ更新）はグループに属さないので、対象にならない
-5. 検査がすべて通っている
+2. コミットが 1 つだけである
+3. そのコミットの作者が Dependabot で、GitHub 自身の鍵で署名されている
+4. その head を push したのが Dependabot である
+5. 変わったファイルがロックファイルだけである
+6. 更新がすべて patch のグループに属している。脆弱性の修正として出る更新（セキュリティ更新）はグループに属さないので、対象にならない
+7. 検査がすべて通っている
+
+3 と 4 の確かめ方は次のとおりです。
+
+- コミットの作者の欄は、誰でも自由に書けます。作者の欄だけでは Dependabot と判断しません
+- 署名は、GitHub の API が返す `wasSignedByGitHub` を見ます。Dependabot のコミットは、GitHub 自身の鍵（署名者は `web-flow`）で署名されます。人が自分の鍵で署名したコミットは、署名が有効でも対象にしません
+- head を push した主体は、その head で検査を起こした主体（workflow の実行の `actor`）で確かめます。過去の本物のコミットを人が別のブランチへ持ってきた場合は、主体が人になるので対象にしません
+
+判定の実装は `automation/dependabot_merge.py` の `classify` と `normalize` です。
 
 App がしないことは次のとおりです。
 
@@ -109,6 +121,11 @@ App がしないことは次のとおりです。
 | 必須の検査は、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
 | マージキューで、最新の main と合わせて検査し直す | 単独では通るが、合わせると壊れる変更が入らない |
 
+鍵を使う job は、PR の中身を取り出しません。実行もしません。次の 2 か所で確かめられます。
+
+- `.github/workflows/dependabot-merge.yml` の `merge` job。`actions/checkout` の `ref` が既定のブランチ（main）で、動かすのは main の `automation/dependabot_merge.py` だけ
+- `automation/dependabot_merge.py`。PR については GitHub の API を呼ぶだけで、PR のブランチを取得する処理も、PR のファイルを実行する処理も無い
+
 ## 悪用への備え
 
 実際に試した結果です。
@@ -117,12 +134,19 @@ App がしないことは次のとおりです。
 |---|---|---|
 | main 以外のブランチの workflow から、鍵を読む | job が起動しない。「Branch "probe/approval-bypass" is not allowed to deploy to automerge due to environment protection rules.」 | [実行 43605292206](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43605292206) の `read-key` |
 | main 以外のブランチの workflow から、`GITHUB_TOKEN` で PR を承認する | 422 で拒否。「GitHub Actions is not permitted to approve pull requests.」 | 同じ実行の `approve-with-github-token` |
-| Dependabot の PR のブランチに、人がコミットを積む | 自動マージの対象から外れ、人に依頼が回る。「コミットが 2 個あります / Dependabot の署名の無いコミットがあります」 | [実行 43605421916](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43605421916)、[PR #34 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/34) |
+| Dependabot の PR のブランチに、人がコミットを積む | 対象から外れ、人に依頼が回る。「コミットが 2 個あります / Dependabot の署名の無いコミットがあります」 | [実行 43605421916](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43605421916)、[PR #34 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/34) |
+| 作者を Dependabot と偽り、署名の無いコミットを Dependabot の PR に push する（中身とメッセージは本物と同じ） | 対象から外れる。「Dependabot の署名の無いコミットがあります / head を push したのが Dependabot ではありません: kazufusa」 | [実行 43611062711](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611062711) |
+| GitHub の API でコミットを作り、作者を Dependabot と指定する | コミットは署名なし（`verified: false`、`reason: unsigned`）になり、対象から外れる | [実行 43611181132](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611181132) |
+| 本物の Dependabot のコミットを、人が push し直す | 対象から外れる。「head を push したのが Dependabot ではありません: dependabot[bot], kazufusa」 | [実行 43611286487](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611286487) |
 | 検査が落ちる patch の更新 | 承認されない。`needs-review` ラベルが付き、人に依頼が回る | [PR #16](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/16) |
 | セキュリティ更新 | 承認されない。人に依頼が回る | [PR #10](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/10) |
 
-PR #34 では、人のコミットを取り除いて Dependabot のコミットだけに戻したあと、自動マージされました。
-head が Dependabot の署名付きのコミットであれば、誰がブランチを戻したかは問いません。入るのは Dependabot が作った内容だけです。
+試していない偽装が 2 つあります。
+
+- 人が、GitHub に登録した自分の鍵で署名し、作者を Dependabot と偽ったコミット。試験に使える登録済みの鍵が無く、実物では試していません。判定は `wasSignedByGitHub` が偽のコミットを弾きます。この分岐は `automation/test_dependabot_merge.py` の `SignatureTest` で確かめています。head を push した主体の条件でも弾かれます
+- GitHub の画面で作ったコミット（GitHub の鍵で署名される）。画面では作者が操作した人になり、Dependabot を名乗れません。Dependabot の PR に積むと、コミットが 2 つになるか、head を push した主体が人になります
+
+条件 4 は、この検証の途中で足しました。足す前は、人が Dependabot のコミットに戻した PR #34 が自動マージされました（14:34 に kazufusa が戻し、14:36 にマージ）。入った内容は Dependabot が作ったものですが、過去の更新を人の判断で入れ直せる状態でした。足したあとは、同じ操作が弾かれます（上の表の 3 行目）。
 
 ## 鍵の扱い
 
@@ -142,21 +166,96 @@ head が Dependabot の署名付きのコミットであれば、誰がブラン
 
 | 項目 | 内容 | 確かめたか |
 |---|---|---|
-| 鍵の作り直し | 年に 1 回と、担当者の交代のときを提案します。手順は github-app.md の「鍵の作り直し」 | 試していない |
-| 一時的に止める | リポジトリの workflow `dependabot-merge` を無効にする。または secret を消す | workflow の無効化と再開は行った。無効の間、振り分けは起動しなかった。secret を消す方法は試していない |
+| 鍵の作り直し | 担当者の交代のときと、漏れの疑いがあるときに行う。定期の周期は、情報システム部門のほかの鍵の決まりに合わせる。この鍵には期限が無く、周期を決める技術上の根拠は無い。手順は github-app.md の「鍵の作り直し」 | 試していない |
+| 一時的に止める | リポジトリの workflow `dependabot-merge` を無効にする。または secret を消す。workflow の無効化は、書き込み権限のある人ができる | workflow の無効化と再開は行った。無効の間、振り分けは起動しなかった。secret を消す方法は試していない |
 | 完全に外す | 組織の設定で App を Uninstall し、environment の変数と secret を消す | 試していない |
 | 記録の追い方 | PR の画面に、App の承認、`automerge` ラベル、キューへの投入、マージが、時刻と主体つきで残る。判定の理由は workflow `dependabot-merge` の実行ログに残る | 試した。上の各 PR の経過がその例 |
-| 組織の監査ログ | App の作成、install、権限の変更が残るはず | 見ていない |
+| 組織の監査ログ | App の作成、install、ruleset の変更が残るはず | 見ていない。検証用の組織は Free プランで、監査ログの API は 404 を返した。画面は確かめていない |
+
+## 鍵が漏れたときにできること
+
+鍵の持ち主は、App の権限でできることを、このリポジトリに対してすべて行えます。承認だけではありません。
+
+| できること | 止めるもの | 確かめたか |
+|---|---|---|
+| PR の承認 | ロックファイル以外には所有者のレビューが要る。App は所有者になれない。App が出した PR を App 自身は承認できない | 所有者の要る PR が App の承認で通らないことは、試していない |
+| main へのマージ | ruleset。PR、承認、所有者のレビュー、検査、マージキューを通す必要がある | App によるマージは、条件を満たした PR で確かめた |
+| main への直接の push、main の削除 | ruleset。迂回できる主体は登録していない | 人のアカウントで、push が拒否されることを確かめた。App では試していない |
+| main 以外のブランチへの push、作成、削除 | 止めない | 試していない |
+| タグの作成、更新、削除。リリースの作成 | タグの ruleset（`settings/ruleset-tags.json`）。管理者だけがタグを作れる | ruleset は入れた。App で拒否されることは試していない |
+| workflow のファイル（`.github/workflows/`）の変更 | App に Workflows の権限が無い | 試していない |
+| PR へのコメント、ラベル、レビュー依頼、クローズ | 止めない | 試していない |
+| ほかのリポジトリへの操作 | install 先がこのリポジトリだけ | install 先は API で確かめた |
+
+止めないものの影響は次のとおりです。
+
+- main 以外のブランチに push できても、main に入れるにはレビューと検査が要ります
+- Dependabot の PR のブランチに push すると、その PR は自動マージの対象から外れます（条件 4）
+- 人が出した、ロックファイルだけを変える PR は、鍵の持ち主が App で承認すると通ります。書き込み権限のある人と鍵の持ち主が組むと、ロックファイルの変更を人のレビューなしで入れられます。検査は通す必要があります
+- main 以外のブランチやタグから配布や公開をしているリポジトリでは、そのブランチとタグにも ruleset が要ります
+
+漏れに気づいたときは、App の設定画面で鍵を消します。消した鍵は、その時点で使えなくなります。
+
+## リポジトリを増やすとき
+
+2 つの案があります。どちらにするかは決めていません。
+
+| 案 | 得 | 失 |
+|---|---|---|
+| リポジトリごとに App を分ける | 鍵が漏れても、影響は 1 つのリポジトリにとどまる。止めるときも 1 つだけ止められる | App と鍵の数が増え、作り直しの手間が増える |
+| 1 つの App を使い回す | App と鍵の管理が 1 か所で済む。作り直しも 1 回 | 同じ鍵を複数のリポジトリの secret に置く。1 か所から漏れると、install 先の全部に効く |
+
+使い回す場合も、install 先は「Only select repositories」で 1 つずつ足します。
+
+## 検証で行った保護の一時解除
+
+この検証は、人が 1 人だけの組織で行いました。
+ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
+そのため、main の変更のたびに、ruleset を無効にし、push し、すぐ有効に戻しました。回数は 7 回です（2026-11-14）。無効の時間は、それぞれ数秒です。
+組織の監査ログには、ruleset の変更として残るはずです。
+人が 2 人以上いる組織では、この操作は要りません。ruleset に迂回できる主体は登録していません。
+
+## 待機の効く範囲
+
+待機は 7 日に設定しています。ただし、配布元によって効くものと効かないものがあります。
+設定は受け付けられ、警告も出ないので、効いていないことに気づきにくい点に注意が要ります。
+
+| 配布元 | 待機 | 確かめ方 | 実例 |
+|---|---|---|---|
+| Docker Hub のイメージ | 効く | このリポジトリの Dependabot の実行 | terraform は 1.17.2（公開 3 日後）ではなく 1.17.1、node は 24.22.3 ではなく 24.22.2、python は 3.13.18 ではなく 3.13.17 が選ばれた。ログは「Skipping tag 1.17.2 due to cooldown period」 |
+| Docker Hub 以外のイメージ（ghcr.io など） | 効かない | このリポジトリの Dependabot の実行 | ghcr.io の uv は、公開 2 日後の 0.13.8 が選ばれた（[PR #23](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/23)）。ログは「No verified registry publication date source for ghcr.io; skipping cooldown for astral-sh/uv:0.13.8」 |
+| PyPI | 効く | このリポジトリの Dependabot の実行 | humanize は 4.17.0（公開 2 日後）ではなく 4.16.0 が選ばれた。ログは「Filtered out 1 versions due to cooldown」 |
+| npm | 効く | 手元で Dependabot の本体を動かした | libphonenumber-js は、公開 4 日後の 1.13.16 が提案されなかった。待機を 0 日にすると提案された |
+| Terraform のレジストリ | 効く | 手元で Dependabot の本体を動かした | hashicorp/azurerm は、公開 1 日後の 5.14.0 が提案されなかった。待機を 0 日にすると提案された |
+| GitHub Actions | 効く。ただし数え方が違う | 手元で Dependabot の本体を動かした | 公開 4 日後の版は提案されず、1 つ前の版が提案された。日数は、公開日ではなく、タグが指すコミットの日付で数えていた。古いコミットにあとからタグを付けた版は、公開の直後でも待機を通る |
+| セキュリティ更新 | かからない | 試していない | GitHub の仕様では、待機はセキュリティ更新にかからない。このリポジトリで出たセキュリティ更新は、どれも公開から 7 日以上たった版だったので、実例にならない |
+
+「手元で動かした」は、Dependabot の本体（dependabot-core）を dependabot CLI で動かした結果です。GitHub のサービス上の実行ではありません。
+Docker Hub 以外で効かない理由は、Dependabot の実装にあります。イメージの公開日を取る処理が Docker Hub にしか無く、取れないときは待機を飛ばします（dependabot-core の `docker/lib/dependabot/docker/update_checker.rb`）。ghcr.io に限らず、Docker Hub 以外のレジストリは同じ扱いです。
+待機を設定に書かない場合も、Dependabot の本体は 3 日の待機をかけます。
+
+自動マージの対象になるのは、ロックファイルだけを変える更新です。配布元は PyPI、npm、Terraform のレジストリの 3 つです。
+コンテナイメージと GitHub Actions の更新は、版を書いたファイルが変わるので、待機が効くかどうかに関係なく、所有者のレビューを通ります。
+
+コンテナイメージは Docker Hub のものを使う決まりにしました。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/check_versions.py`）が落ちます。
+Docker Hub に無いイメージを使うときは、待機が効かないと承知したうえで、人のレビューで守ります。
+Docker Hub には、認証なしで取得できる回数に制限があります。検査が取得で失敗するようになったら、認証を足します。
 
 ## 残る危険
 
 仕組みでは塞げないものです。受け入れるかどうかの判断を、情報システム部門とリポジトリの責任者にお願いします。
 
-- リポジトリの管理者は、environment の使えるブランチや、ブランチ保護を変えられます。管理者は、App が無くても保護を外せる立場です。管理者を絞ることが対策です
-- 鍵が漏れると、持ち主はこのリポジトリの PR を承認できます。それでも、ロックファイル以外の変更には所有者のレビューが要り、検査も通す必要があります。ほかのリポジトリには何もできません
-- 配布元で悪意のある patch が公開され、検査も通ると、自動で入ります。公開から 7 日たった版だけを取り込む設定（cooldown）で、発覚までの時間を取っています
-- 人が出した、ロックファイルだけを変える PR は、所有者ではない誰か 1 名の承認で通ります。App は関わりませんが、ロックファイルを所有者なしにしたことの帰結です
+- リポジトリの管理者は、environment の使えるブランチや、ruleset を変えられます。管理者は、App が無くても保護を外せる立場です。管理者を絞ることが対策です
+- 鍵が漏れたときにできることは、上の表のとおりです
+- 配布元で悪意のある patch が公開され、待機の日数を過ぎても発覚せず、検査も通ると、自動で入ります。待機は発覚までの時間を取るもので、防ぐものではありません
+- 人が出した、ロックファイルだけを変える PR は、ruleset の上では、所有者ではない誰か 1 名の承認で通ります。ロックファイルを所有者なしにしたことの帰結です。実物では試していません
 - 判定の workflow は、GitHub が配る部品（`actions/checkout`）を 1 つ使います。版はコミットの値で固定しています
+
+悪意のある更新が入ったと分かったときの手順は次のとおりです。
+
+1. 止める。リポジトリの書き込み権限のある人が、workflow `dependabot-merge` を無効にする。組織の所有者は、App を止める（Suspend）こともできる。Suspend は試していない
+2. 探す。`automerge` ラベルの付いたマージ済みの PR を一覧にする。PR には、更新した依存と版、承認とマージの時刻が残っている
+3. 戻す。その PR を打ち消す PR を出す。人が出す PR なので、通常のレビューを通る
 
 ## 作業のあとに確かめる項目
 

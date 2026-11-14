@@ -120,6 +120,7 @@ gh api orgs/<組織>/actions/permissions/workflow
 ## 運用
 
 鍵の作り直しと、App を外す手順は、このリポジトリでは試していません。
+鍵が漏れたときにできることと、リポジトリを増やすときの考え方は、[app-request.md](app-request.md) にあります。
 
 ### 鍵の作り直し
 

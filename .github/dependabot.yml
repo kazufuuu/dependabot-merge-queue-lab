@@ -111,6 +111,7 @@ updates:
         update-types: [minor]
 
   # ランタイムと道具の版は Dockerfile の FROM で決める。
+  # 待機（cooldown）は Docker Hub のイメージにしか効かないので、イメージは Docker Hub のものを使う。
   # 同じイメージを全部の Dockerfile で一度に上げるため、ディレクトリをまとめる。
   - package-ecosystem: docker
     directories:
