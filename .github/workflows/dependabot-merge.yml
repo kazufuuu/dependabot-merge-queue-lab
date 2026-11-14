@@ -10,25 +10,54 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  checks: read
-  actions: write
+  contents: read
 
 concurrency:
   group: dependabot-merge
   cancel-in-progress: false
 
 jobs:
-  reconcile:
+  # ラベル、レビュー依頼、コメントを付ける。
+  triage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: read
+    outputs:
+      to_merge: ${{ steps.triage.outputs.to_merge }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ github.event.repository.default_branch }}
       - name: Dependabot の PR を振り分ける
+        id: triage
         env:
           GH_TOKEN: ${{ github.token }}
           AUTOMERGE_DEV_MINOR: ${{ vars.AUTOMERGE_DEV_MINOR }}
-        run: python3 automation/dependabot_merge.py
+        run: python3 automation/dependabot_merge.py triage
+
+  # 自動マージの条件を満たす PR を、承認してマージキューに入れる。
+  # 鍵は、main だけが使える environment に置く。ほかのブランチの workflow からは読めない。
+  merge:
+    needs: triage
+    if: needs.triage.outputs.to_merge != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: automerge
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - name: 承認してマージキューに入れる
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTOMERGE_DEV_MINOR: ${{ vars.AUTOMERGE_DEV_MINOR }}
+          AUTOMERGE_APP_ID: ${{ vars.AUTOMERGE_APP_ID }}
+          AUTOMERGE_APP_PRIVATE_KEY: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+        run: python3 automation/dependabot_merge.py merge

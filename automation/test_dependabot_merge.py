@@ -5,7 +5,6 @@ from dependabot_merge import LABEL_AUTO, LABEL_HUMAN, Policy, classify, parse_up
 POLICY = Policy(
     reviewers=("alice",),
     required_check="all-green",
-    ci_workflow="ci.yml",
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
     patch_group="patch",
     dev_minor_group="dev-minor",

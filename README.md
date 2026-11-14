@@ -51,10 +51,15 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 - 判定は main の版で動きます。PR の中身は実行しません
 - 種別は、Dependabot がコミットメッセージに書くメタデータで判定します。コミットに Dependabot の署名があることも確かめます
-- 自動マージする PR には、検査が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
 - 人が見る PR には、`needs-review` ラベルと理由のコメントを付け、レビューを依頼します
+- 自動マージする PR には、検査が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
 - マージキューの検査で外された PR も、人に依頼します
-- `GITHUB_TOKEN` でキューに入れた PR では、merge_group の検査が起動しません。振り分けが、キューのブランチを指して検査を workflow_dispatch で起動します
+
+承認とマージキューへの投入は、専用の GitHub App が行います。
+
+- `GITHUB_TOKEN` でキューに入れると、merge_group の検査が起動せず、キューが止まります。App のトークンで入れると起動します
+- App の鍵は environment `automerge` の secret に置きます。この environment は main だけが使えるので、ほかのブランチの workflow からは鍵を読めません
+- 「GitHub Actions による PR の承認」は無効にします。人が自分のブランチに workflow を足しても、自分の PR は承認できません
 
 ### 検査
 
@@ -72,7 +77,8 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 ## 設定の反映
 
-`settings/apply.sh <owner>/<repo>` が、リポジトリの設定と ruleset（`settings/ruleset.json`）を反映します。
+`settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset（`settings/ruleset.json`）を反映します。
+GitHub App は手で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
 
 ## 範囲の見直し
 
@@ -80,9 +86,9 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 出た本数、自動でマージされた本数、人が触った本数が、更新の種類ごとに分かります。
 人が承認するだけの PR が多ければ、`AUTOMERGE_DEV_MINOR` で範囲を広げます。
 
-## 残る穴
+## 残る制約
 
-workflow の承認は `GITHUB_TOKEN` で行います。
-書き込み権限のある人は、ロックファイルだけを変える PR を、自分で用意した workflow の承認で通せます。
-manifest と合わないロックファイルは、検査の `uv sync --locked` と `npm ci` が落とします。
-この穴を塞ぐには、承認を専用の GitHub App に移し、鍵を main だけが使える environment に置きます。
+- Dockerfile の `FROM`、Actions の `uses:`、`==` で固定した依存には、ロックファイルがありません。patch の更新でも版を書いたファイルが変わるので、人の承認が要ります
+- Dependabot は、依存ごとに最新の版だけを提案します。範囲を超える版が出ている依存では、範囲の中の patch は提案されません
+- uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります
+- App は CODEOWNERS の所有者になれません。App の承認で通るのは、所有者のいないロックファイルだけを変える PR です

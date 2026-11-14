@@ -10,9 +10,19 @@ gh api -X PATCH "repos/$repo" \
   -F allow_merge_commit=false -F allow_rebase_merge=false \
   -F delete_branch_on_merge=true >/dev/null
 
-# 検査が通った patch の PR を、workflow が承認できるようにする。
+# 承認は専用の GitHub App が行う。workflow の GITHUB_TOKEN には承認させない。
 gh api -X PUT "repos/$repo/actions/permissions/workflow" \
-  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true
+  -f default_workflow_permissions=read -F can_approve_pull_request_reviews=false
+
+# App の鍵は、main だけが使える environment に置く。
+gh api -X PUT "repos/$repo/environments/automerge" --input - >/dev/null <<'JSON'
+{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+JSON
+if ! gh api "repos/$repo/environments/automerge/deployment-branch-policies" \
+  --jq '.branch_policies[].name' | grep -qx main; then
+  gh api -X POST "repos/$repo/environments/automerge/deployment-branch-policies" \
+    -f name=main -f type=branch >/dev/null
+fi
 
 gh api -X PUT "repos/$repo/vulnerability-alerts"
 gh api -X PUT "repos/$repo/automated-security-fixes"

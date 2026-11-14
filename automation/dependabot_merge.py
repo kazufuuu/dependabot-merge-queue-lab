@@ -12,15 +12,19 @@
 - 必須の検査が、その head で成功している
 
 条件を満たさない PR には、レビューを依頼してラベルを付ける。
+承認とマージキューへの投入は、専用の GitHub App のトークンで行う。
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,14 +39,12 @@ DEV = "direct:development"
 
 DEPENDABOT_AUTHOR = "dependabot"  # GraphQL での PR の作成者（Bot）
 DEPENDABOT_COMMITTER = "dependabot[bot]"  # コミットの作者
-APPROVER = "github-actions"  # GITHUB_TOKEN で承認したときのレビューの作者
 
 
 @dataclass(frozen=True)
 class Policy:
     reviewers: tuple[str, ...]
     required_check: str
-    ci_workflow: str
     lockfiles: tuple[str, ...]
     patch_group: str
     dev_minor_group: str
@@ -87,7 +89,6 @@ def load_policy(env: dict[str, str] | None = None) -> Policy:
     return Policy(
         reviewers=tuple(raw["reviewers"]),
         required_check=raw["required_check"],
-        ci_workflow=raw["ci_workflow"],
         lockfiles=tuple(raw["lockfiles"]),
         patch_group=raw["patch_group"],
         dev_minor_group=raw["dev_minor_group"],
@@ -239,8 +240,9 @@ query($owner: String!, $name: String!) {
 """
 
 
-def gh(*args: str, input_text: str | None = None) -> str:
-    result = subprocess.run(["gh", *args], input=input_text, capture_output=True, text=True, check=False)
+def gh(*args: str, token: str | None = None) -> str:
+    env = {**os.environ, "GH_TOKEN": token} if token else None
+    result = subprocess.run(["gh", *args], capture_output=True, text=True, check=False, env=env)
     if result.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args[:4])}: {result.stderr.strip()}")
     return result.stdout
@@ -287,7 +289,7 @@ def normalize(node: dict, policy: Policy) -> dict:
         "approved_commits": [
             r["commit"]["oid"]
             for r in reviews
-            if r["state"] == "APPROVED" and r["author"] and r["author"]["login"] == APPROVER and r["commit"]
+            if r["state"] == "APPROVED" and r["author"] and r["author"]["__typename"] == "Bot" and r["commit"]
         ],
         "check": check_state(node["statusCheckRollup"], policy.required_check),
         "in_merge_queue": node["mergeQueueEntry"] is not None,
@@ -306,14 +308,16 @@ def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
     ]
 
 
-def apply(plan: Plan, pr: dict, repo: str) -> None:
+def apply_triage(plan: Plan, repo: str) -> None:
+    """ラベル、レビュー依頼、コメントを付ける。GITHUB_TOKEN で行う。"""
     number = str(plan.number)
     for label in plan.remove_labels:
         gh("pr", "edit", number, "--repo", repo, "--remove-label", label)
     if plan.disable_auto_merge:
         gh("pr", "merge", number, "--repo", repo, "--disable-auto")
     for label in plan.add_labels:
-        gh("pr", "edit", number, "--repo", repo, "--add-label", label)
+        if label != LABEL_AUTO:
+            gh("pr", "edit", number, "--repo", repo, "--add-label", label)
     if plan.request_reviewers:
         gh(
             "api", "-X", "POST", f"repos/{repo}/pulls/{number}/requested_reviewers",
@@ -321,87 +325,97 @@ def apply(plan: Plan, pr: dict, repo: str) -> None:
         )  # fmt: skip
     if plan.comment:
         gh("pr", "comment", number, "--repo", repo, "--body", plan.comment)
-    if plan.approve:
-        gh(
-            "api", "-X", "POST", f"repos/{repo}/pulls/{number}/reviews",
-            "-f", "event=APPROVE", "-f", f"commit_id={pr['head']}",
-            "-f", "body=patch の更新で、検査が通っています。自動で承認します。",
-        )  # fmt: skip
-    if plan.enqueue:
-        gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"])
 
 
-QUEUE_QUERY = """
-query($owner: String!, $name: String!) {
-  repository(owner: $owner, name: $name) {
-    defaultBranchRef { name }
-    mergeQueue { entries(first: 20) { nodes { headCommit { oid } pullRequest { number } } } }
-  }
-}
-"""
+def apply_merge(plan: Plan, pr: dict, repo: str, token: str) -> None:
+    """承認してマージキューに入れる。専用の GitHub App のトークンで行う。
 
-
-def start_merge_queue_checks(repo: str, policy: Policy, wait_seconds: int) -> None:
-    """マージキューの各組で、検査を起動する。
-
-    GITHUB_TOKEN でキューに入れた PR では、merge_group の検査が起動しない。
-    workflow_dispatch は GITHUB_TOKEN でも起動できるので、キューのブランチを指して検査を起動する。
-    キューのブランチができるまで少し待つ。
+    GITHUB_TOKEN でキューに入れると、merge_group の検査が起動せず、キューが止まる。
     """
-    owner, name = repo.split("/")
-    deadline = time.monotonic() + wait_seconds
-    started: set[str] = set()
-    while True:
-        out = gh("api", "graphql", "-f", f"query={QUEUE_QUERY}", "-f", f"owner={owner}", "-f", f"name={name}")
-        repository = json.loads(out)["data"]["repository"]
-        entries = (repository["mergeQueue"] or {"entries": {"nodes": []}})["entries"]["nodes"]
-        base = repository["defaultBranchRef"]["name"]
-        refs = json.loads(gh("api", f"repos/{repo}/git/matching-refs/heads/gh-readonly-queue/{base}/"))
-        ref_by_sha = {ref["object"]["sha"]: ref["ref"].removeprefix("refs/heads/") for ref in refs}
-        waiting = False
-        for entry in entries:
-            sha = (entry["headCommit"] or {}).get("oid")
-            if sha is None or sha not in ref_by_sha:
-                waiting = True
-                continue
-            if sha in started:
-                continue
-            started.add(sha)
-            runs = gh(
-                "api", f"repos/{repo}/actions/workflows/{policy.ci_workflow}/runs?head_sha={sha}",
-                "--jq", ".total_count",
-            )  # fmt: skip
-            if runs.strip() != "0":
-                continue
-            gh("workflow", "run", policy.ci_workflow, "--repo", repo, "--ref", ref_by_sha[sha])
-            print(f"#{entry['pullRequest']['number']}: マージキューの検査を起動しました（{ref_by_sha[sha]}）")
-        if not waiting or time.monotonic() >= deadline:
-            return
-        time.sleep(10)
+    number = str(plan.number)
+    gh(
+        "api", "-X", "POST", f"repos/{repo}/pulls/{number}/reviews",
+        "-f", "event=APPROVE", "-f", f"commit_id={pr['head']}",
+        "-f", "body=patch の更新で、検査が通っています。自動で承認します。",
+        token=token,
+    )  # fmt: skip
+    gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)
+    gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"], token=token)
+
+
+def b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def app_token(repo: str, app_id: str, private_key: str) -> str:
+    """GitHub App の、このリポジトリだけに効くトークンを作る。"""
+    now = int(time.time())
+    unsigned = ".".join(
+        b64url(json.dumps(part, separators=(",", ":")).encode())
+        for part in ({"alg": "RS256", "typ": "JWT"}, {"iat": now - 60, "exp": now + 300, "iss": app_id})
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".pem") as key_file:
+        key_file.write(private_key)
+        key_file.flush()
+        signature = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", key_file.name],
+            input=unsigned.encode(), capture_output=True, check=True,
+        ).stdout  # fmt: skip
+    jwt = f"{unsigned}.{b64url(signature)}"
+
+    def call(method: str, path: str, body: dict | None = None) -> dict:
+        request = urllib.request.Request(
+            f"https://api.github.com{path}",
+            method=method,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Authorization": f"Bearer {jwt}", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.load(response)
+
+    installation = call("GET", f"/repos/{repo}/installation")
+    token = call(
+        "POST",
+        f"/app/installations/{installation['id']}/access_tokens",
+        {"repositories": [repo.split("/")[1]]},
+    )["token"]
+    print(f"::add-mask::{token}")
+    return token
 
 
 def main() -> int:
+    """triage はラベルと依頼を付け、merge は承認とキューへの投入を行う。
+
+    merge は、鍵を持つ別の job から呼ぶ。対象の PR は、その場で判定し直す。
+    """
+    mode = sys.argv[1] if len(sys.argv) > 1 else "dry-run"
+    if mode not in ("triage", "merge", "dry-run"):
+        print("usage: dependabot_merge.py [triage|merge|dry-run]")
+        return 2
     repo = os.environ["GITHUB_REPOSITORY"]
-    dry_run = "--dry-run" in sys.argv
     policy = load_policy()
     print(f"policy: dev_minor={policy.dev_minor} reviewers={list(policy.reviewers)}")
+    token = None
     failed = False
+    to_merge = 0
     for pr in fetch_pull_requests(repo, policy):
         plan = plan_for(pr, policy)
         print(f"#{plan.number}: {plan.summary}" + (" (変更なし)" if plan.is_noop() else ""))
-        if dry_run or plan.is_noop():
-            continue
+        to_merge += plan.enqueue
         try:
-            apply(plan, pr, repo)
+            if mode == "triage" and not plan.is_noop():
+                apply_triage(plan, repo)
+            elif mode == "merge" and plan.enqueue:
+                token = token or app_token(
+                    repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"]
+                )
+                apply_merge(plan, pr, repo, token)
         except RuntimeError as error:
             failed = True
             print(f"::error::#{plan.number}: {error}")
-    if not dry_run:
-        try:
-            start_merge_queue_checks(repo, policy, wait_seconds=120)
-        except RuntimeError as error:
-            failed = True
-            print(f"::error::{error}")
+    if mode == "triage" and "GITHUB_OUTPUT" in os.environ:
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"to_merge={to_merge}\n")
     return 1 if failed else 0
 
 
