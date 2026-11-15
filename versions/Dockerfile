@@ -5,4 +5,4 @@
 FROM python:3.13.16-slim AS python
 FROM node:24.20.0-slim AS node
 FROM hashicorp/terraform:1.16.5 AS terraform
-FROM astral/uv:0.13.5 AS uv
+FROM astral/uv:0.13.7 AS uv
