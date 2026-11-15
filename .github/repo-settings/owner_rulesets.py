@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """所有者のレビューを求める ruleset を 2 つ作って、JSON で出す。
 
-使い方: .github/settings/owner_rulesets.py <owner>/<repo> <出力先のディレクトリ>
+使い方: .github/repo-settings/owner_rulesets.py <owner>/<repo> <出力先のディレクトリ>
 
 すべてのファイルに、team のレビューを求める。求め方を、ファイルで 2 つに分ける。
 

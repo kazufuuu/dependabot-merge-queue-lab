@@ -13,7 +13,7 @@
 |---|---|---|
 | `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
 | `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
-| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト | 持っていく |
+| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 持っていく |
 | `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 持っていく |
 | `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
 | `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
@@ -258,7 +258,7 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 | `justfile` | 人が手で打つ作業の入口。CI も同じレシピを呼ぶ |
 | `.github/workflows/dependabot-stats.yml` | Dependabot の PR の本数を、週に 1 回数える |
 | `.github/workflows/actions.lock` | workflow が使う action を、コミットで固定する |
-| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト |
+| `.github/repo-settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト |
 | GitHub App | 承認、マージキューへの投入、バージョンを写すコミット、セキュリティアップデートの PR を行う主体 |
 | ruleset（`main`、`owners-lockfiles`、`owners-others`、`tags`） | main とタグの保護。App が所有者のレビューなしで通せるのは、ロックファイルだけ |
 
@@ -269,14 +269,14 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 | 開発用の依存の minor を自動にする | リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にする |
 | レビュワーの人数 | `.github/scripts/policy.json` の `review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | 所有者 | team のメンバーを変える |
-| マージに要る承認の数 | `.github/settings/ruleset.json` の `required_approving_review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
+| マージに要る承認の数 | `.github/repo-settings/ruleset.json` の `required_approving_review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | cooldown | `.github/dependabot.yml` の `cooldown` の `default-days` |
 | 同時に開く PR の上限 | `.github/dependabot.yml` の `open-pull-requests-limit` |
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
 | 更新の対象 | `.github/dependabot.yml` に設定を足す。Python や Node のようなランタイムを足すときは、Dependabot 用の `dependabot/Dockerfile` に `FROM` を足し、`.github/scripts/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
 | ロックファイルの種類 | `.github/scripts/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
 
-`uv run just apply-settings` は、`.github/settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
+`uv run just apply-settings` は、`.github/repo-settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
 
 ### 調べ方
 
@@ -297,7 +297,7 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 | 手元で「No interpreter found for Python ...」と出る | 手元の uv が古く、その Python をまだ知らない | `uv self update` で uv を更新する。CI では起きない（Python は setup-python が入れる） |
 | セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。pytest の警告が直下と `api/` の 2 つにあり、直下の警告にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
 | ランタイムや Terraform 本体の PR が main と衝突した。`@dependabot rebase` が断られる | `.python-version` などのバージョンを書き換えるコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、バージョンを写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、1 時間たっても反応が無かった。理由は分かっていない） |
-| Dependabot が PR を作り直さない | Dependabot は、コメントの依頼に反応しないことがある。確認が起きても、開いている PR を「すでにある」（already exists）と扱い、作り直さないことがある。どちらも、こちらでは直せない（[PR #78](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/78) で見た） | 人が衝突を直して入れるか、閉じて次のバージョンを待つ。確認を起こすには、`.github/dependabot.yml` の設定（時刻など）を変える。1 か所の時刻を変えただけで、全部の設定の確認が起きた。1 つの設定だけを起こすことは、できなかった。注意書きだけを変えた push でも、全部の設定の確認が起きたことがある |
+| Dependabot が PR を作り直さない | Dependabot は、コメントの依頼に反応しないことがある。確認が起きても、開いている PR を「すでにある」（already exists）と扱い、作り直さないことがある。どちらも、こちらでは直せない（[PR #78](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/78) で見た） | 人が衝突を直して入れるか、閉じて次のバージョンを待つ。Dependabot の設定の `directory` を変えると、新しい PR が出直す（Dependabot 用の Dockerfile を移したときに見た。古い PR は残るので、人が閉じる）。確認を起こすには、`.github/dependabot.yml` の設定（時刻など）を変える。1 か所の時刻を変えただけで、全部の設定の確認が起きた。1 つの設定だけを起こすことは、できなかった。注意書きだけを変えた push でも、全部の設定の確認が起きたことがある |
 | Dependabot 用の Dockerfile から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を Dependabot 用の Dockerfile から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。枝は、閉じたあとに消す |
 | main に push できない | ruleset が、PR とレビューと CI を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 

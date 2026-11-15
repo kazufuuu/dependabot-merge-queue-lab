@@ -11,7 +11,7 @@
 # open-pull-requests-limit は、依存の数より大きくする。人の判断待ちの PR で埋まると、patch の PR も出なくなる。
 # 例外は github-actions。人が判断するので、patch、minor、major を 1 本にまとめる。
 # セキュリティアップデートはグループに入れない。cooldown もかからず、依存ごとにすぐ出る。
-# 自動マージの条件は .github/scripts/dependabot_merge.py にある。所有者のレビューの決まりは .github/settings/ にある。
+# 自動マージの条件は .github/scripts/dependabot_merge.py にある。所有者のレビューの決まりは .github/repo-settings/ にある。
 version: 2
 
 updates:

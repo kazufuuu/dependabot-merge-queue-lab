@@ -15,7 +15,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 |---|---|---|
 | `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
 | `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
-| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト | 持っていく |
+| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 持っていく |
 | `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 持っていく |
 | `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
 | `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
@@ -178,8 +178,8 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 | 変えたいこと | 変える場所 |
 |---|---|
-| 割り振る人数 | `.github/scripts/policy.json` の `review_count`。`.github/settings/apply.sh` が team の設定に反映する |
-| マージに要る承認の数 | `.github/settings/ruleset.json` の `required_approving_review_count` |
+| 割り振る人数 | `.github/scripts/policy.json` の `review_count`。`.github/repo-settings/apply.sh` が team の設定に反映する |
+| マージに要る承認の数 | `.github/repo-settings/ruleset.json` の `required_approving_review_count` |
 | 所有者を増やす、減らす | team のメンバーを変える |
 
 2 人に割り振っても、承認の数が 1 のままなら、どちらか 1 人の承認で通ります。
@@ -459,14 +459,14 @@ minor や major を上げるなど、人が意図してバージョンを変え�
 
 ## 設定の反映
 
-`uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `.github/settings/apply.sh` です。
+`uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `.github/repo-settings/apply.sh` です。
 ruleset は 4 つです。
 
-- `main`: main の保護（`.github/settings/ruleset.json`）。PR、承認 1 件、必須のチェック、マージキュー
-- `owners-lockfiles` と `owners-others`: 所有者のレビュー。`.github/settings/owner_rulesets.py` が、`.github/scripts/policy.json` のロックファイルの名前、team、App から作る
-- `tags`: タグの保護（`.github/settings/ruleset-tags.json`）
+- `main`: main の保護（`.github/repo-settings/ruleset.json`）。PR、承認 1 件、必須のチェック、マージキュー
+- `owners-lockfiles` と `owners-others`: 所有者のレビュー。`.github/repo-settings/owner_rulesets.py` が、`.github/scripts/policy.json` のロックファイルの名前、team、App から作る
+- `tags`: タグの保護（`.github/repo-settings/ruleset-tags.json`）
 
-GitHub App は `.github/settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
+GitHub App は `.github/repo-settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
 App の作成をほかの部門に頼むときの依頼書は [docs/app-request.md](docs/app-request.md) です。
 
 ## 範囲の見直し

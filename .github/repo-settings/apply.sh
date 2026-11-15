@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # リポジトリの設定と ruleset を、このディレクトリの内容に合わせる。
-# 使い方: .github/settings/apply.sh <owner>/<repo>
+# 使い方: .github/repo-settings/apply.sh <owner>/<repo>
 set -euo pipefail
-repo="${1:?usage: .github/settings/apply.sh <owner>/<repo>}"
+repo="${1:?usage: .github/repo-settings/apply.sh <owner>/<repo>}"
 dir="$(cd "$(dirname "$0")" && pwd)"
 
 gh api -X PATCH "repos/$repo" \

@@ -21,14 +21,14 @@ App に承認させると、承認できるのは鍵を使える workflow だけ
 
 ## 用意の手順
 
-`.github/settings/create-app.py` を使います。画面での操作は、ボタンを 2 回押すことと、install 先を選ぶことだけです。
+`.github/repo-settings/create-app.py` を使います。画面での操作は、ボタンを 2 回押すことと、install 先を選ぶことだけです。
 組織の所有者で、リポジトリの管理者でもある人が行います。`gh` でログインしておきます。
 
-1. environment を作る。`.github/settings/apply.sh <owner>/<repo>` が、main だけが使える environment `automerge` を作る
+1. environment を作る。`.github/repo-settings/apply.sh <owner>/<repo>` が、main だけが使える environment `automerge` を作る
 2. スクリプトを動かす
 
    ```sh
-   .github/settings/create-app.py <owner>/<repo>
+   .github/repo-settings/create-app.py <owner>/<repo>
    ```
 
    App の名前は `<owner>-dependabot-automerge` になる。変えるときは `--name` を付ける。名前は GitHub 全体で重ならないものにする
@@ -36,7 +36,7 @@ App に承認させると、承認できるのは鍵を使える workflow だけ
 4. スクリプトが、App ID を environment の変数 `AUTOMERGE_APP_ID` に、秘密鍵を secret `AUTOMERGE_APP_PRIVATE_KEY` に登録する
 5. スクリプトが表示する install の URL を開く。Only select repositories を選び、対象のリポジトリだけを選んで install する
 6. スクリプトが install を確かめ、対象のリポジトリと権限を表示して終わる
-7. `.github/settings/apply.sh <owner>/<repo>` をもう一度動かす。ロックファイルの所有者のレビューを、App にだけ求めない設定が入る。App を作る前の 1 回目では、この設定は入らない
+7. `.github/repo-settings/apply.sh <owner>/<repo>` をもう一度動かす。ロックファイルの所有者のレビューを、App にだけ求めない設定が入る。App を作る前の 1 回目では、この設定は入らない
 
 スクリプトがしていることは次のとおりです。
 
@@ -75,7 +75,7 @@ WSL2 では、Windows 側のブラウザから `localhost:8765` に届きます�
 
 ### 鍵の登録
 
-environment は `.github/settings/apply.sh <owner>/<repo>` が作ります。名前は `automerge` で、使えるブランチは main だけです。
+environment は `.github/repo-settings/apply.sh <owner>/<repo>` が作ります。名前は `automerge` で、使えるブランチは main だけです。
 手で作る場合は、次のコマンドを使います。
 
 ```sh
@@ -99,7 +99,7 @@ gh secret set AUTOMERGE_APP_PRIVATE_KEY --env automerge --repo "$repo" < <保存
 
 「GitHub Actions による PR の承認」を無効にします。
 
-- リポジトリは `.github/settings/apply.sh` が無効にします。画面では Settings、Actions、General の Workflow permissions にあります
+- リポジトリは `.github/repo-settings/apply.sh` が無効にします。画面では Settings、Actions、General の Workflow permissions にあります
 - 組織は、所有者が次のコマンドで無効にします。画面では、組織の Settings、Actions、General の同じ項目です
 
 ```sh

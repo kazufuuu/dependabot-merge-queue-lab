@@ -75,4 +75,4 @@ lock-actions:
 
 # リポジトリの設定、environment、ruleset を反映する（組織の所有者が動かす。例: just apply-settings owner/repo）
 apply-settings repo:
-    .github/settings/apply.sh {{ repo }}
+    .github/repo-settings/apply.sh {{ repo }}
