@@ -16,8 +16,6 @@ POLICY = Policy(
     required_check="all-green",
     ci_workflow="ci.yml",
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
-    patch_group="patch",
-    dev_minor_group="dev-minor",
 )
 DEV_MINOR = Policy(**{**POLICY.__dict__, "dev_minor": True})
 
@@ -104,23 +102,49 @@ class ClassifyTest(unittest.TestCase):
     def test_ungrouped_major_is_human(self):
         self.assertFalse(classify(with_deps(dep(update="major", group=None)), POLICY).auto)
 
-    def test_unknown_group_is_human(self):
-        self.assertFalse(classify(with_deps(dep(group="everything")), POLICY).auto)
+    def test_group_name_does_not_decide(self):
+        # グループは PR のまとめ方。範囲は、種別と依存の種類で決める。
+        self.assertTrue(classify(with_deps(dep(group="everything")), POLICY).auto)
+        self.assertFalse(classify(with_deps(dep(update="minor", group="patch")), POLICY).auto)
 
     def test_dev_minor_is_human_by_default(self):
-        target = with_deps(dep(update="minor", group="dev-minor", kind="direct:development"))
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
         self.assertFalse(classify(target, POLICY).auto)
 
     def test_dev_minor_is_auto_when_enabled(self):
-        target = with_deps(dep(update="minor", group="dev-minor", kind="direct:development"))
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
         self.assertTrue(classify(target, DEV_MINOR).auto)
 
     def test_production_minor_is_human_even_when_dev_minor_enabled(self):
-        target = with_deps(dep(update="minor", group="dev-minor", kind="direct:production"))
+        target = with_deps(dep(update="minor", group=None, kind="direct:production"))
+        self.assertFalse(classify(target, DEV_MINOR).auto)
+
+    def test_indirect_minor_is_human_even_when_dev_minor_enabled(self):
+        target = with_deps(dep(update="minor", group=None, kind="indirect"))
         self.assertFalse(classify(target, DEV_MINOR).auto)
 
     def test_major_is_human_even_when_dev_minor_enabled(self):
-        target = with_deps(dep(update="major", group="dev-minor", kind="direct:development"))
+        target = with_deps(dep(update="major", group=None, kind="direct:development"))
+        self.assertFalse(classify(target, DEV_MINOR).auto)
+
+    def test_dev_minor_with_manifest_change_is_human(self):
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
+        target["files"] = ["web/package.json", "web/package-lock.json"]
+        self.assertFalse(classify(target, DEV_MINOR).auto)
+
+    def test_dev_minor_metadata_in_an_unsigned_commit_is_human(self):
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
+        target["commits"][0].update(author="mallory", signed_by_github=False)
+        self.assertFalse(classify(target, DEV_MINOR).auto)
+
+    def test_dev_minor_metadata_pushed_by_a_person_is_human(self):
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
+        target["head_pushers"] = ["mallory"]
+        self.assertFalse(classify(target, DEV_MINOR).auto)
+
+    def test_dev_minor_with_a_second_commit_is_human(self):
+        target = with_deps(dep(update="minor", group=None, kind="direct:development"))
+        target["commits"].append({"message": "", "author": "mallory", "signed_by_github": False, "pushers": ["mallory"]})
         self.assertFalse(classify(target, DEV_MINOR).auto)
 
     def test_commit_by_someone_else_is_human(self):

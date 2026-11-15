@@ -56,8 +56,6 @@ class Policy:
     required_check: str
     ci_workflow: str
     lockfiles: tuple[str, ...]
-    patch_group: str
-    dev_minor_group: str
     dev_minor: bool = False
 
 
@@ -100,8 +98,6 @@ def load_policy(env: dict[str, str] | None = None) -> Policy:
         required_check=raw["required_check"],
         ci_workflow=raw["ci_workflow"],
         lockfiles=tuple(raw["lockfiles"]),
-        patch_group=raw["patch_group"],
-        dev_minor_group=raw["dev_minor_group"],
         dev_minor=env.get("AUTOMERGE_DEV_MINOR", "").lower() == "true",
     )
 
@@ -168,14 +164,14 @@ def update_type_of(dep: dict[str, str], message: str) -> str | None:
 
 
 def in_auto_scope(dep: dict[str, str], update_type: str | None, policy: Policy) -> bool:
-    """更新が、自動マージの範囲に入るかを返す。"""
-    group = dep.get("dependency-group")
-    # グループに属さないのは、セキュリティ更新と major。種別が patch なら、patch のグループと同じに扱う。
-    if group in (None, policy.patch_group):
-        return update_type == PATCH
-    if policy.dev_minor and group == policy.dev_minor_group:
-        return update_type in (PATCH, MINOR) and dep.get("dependency-type") == DEV
-    return False
+    """更新が、自動マージの範囲に入るかを返す。
+
+    種別と、依存の種類だけで決める。どちらも、Dependabot が署名したコミットのメッセージから読む。
+    グループの名前は見ない。グループは PR のまとめ方で、範囲の決まりではない。
+    """
+    if update_type == PATCH:
+        return True
+    return policy.dev_minor and update_type == MINOR and dep.get("dependency-type") == DEV
 
 
 def classify(pr: dict, policy: Policy) -> Decision:
@@ -211,12 +207,11 @@ def classify(pr: dict, policy: Policy) -> Decision:
         reasons.append("更新のメタデータを読めません")
     for dep in deps:
         name = dep.get("dependency-name", "?")
-        group = dep.get("dependency-group") or "グループなし"
         update_type = update_type_of(dep, commits[-1]["message"])
         if update_type is None:
             reasons.append(f"{name}: 更新の種別を確かめられません。patch と確かめられた更新だけを自動で入れます")
         elif not in_auto_scope(dep, update_type, policy):
-            reasons.append(f"{name}: {group} の {update_type.rsplit(':', 1)[-1]} は人が見ます")
+            reasons.append(f"{name}: {update_type.rsplit(':', 1)[-1]} は人が見ます")
 
     return Decision(auto=not reasons, reasons=tuple(dict.fromkeys(reasons)))
 

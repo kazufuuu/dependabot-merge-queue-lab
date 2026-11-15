@@ -3,8 +3,10 @@
 # uv ではこの値が効かないので、指定しない。pyproject.toml の [project] に description があり、
 # その名前が PyPI に無いと、Dependabot はライブラリとみなして範囲を広げる方針を選ぶ。
 # この方針では、範囲の中の更新は uv.lock だけが変わり、範囲を超える更新は pyproject.toml も変わる。
-# グループは semver の種別で分ける。patch のグループだけが自動マージの対象になる。
-# major はグループに入れず、依存ごとに 1 本ずつ出す。
+# グループは patch だけにする。minor と major は、依存ごとに 1 本ずつ出す。
+# 注意: minor をグループにしない。グループの PR が開いていると、Dependabot はそのディレクトリの
+# 全部の依存を処理済みとみなし、ほかのグループを飛ばす。minor のグループの PR が人の判断を
+# 待っている間、patch の PR が出なくなり、自動マージが止まる（実物で確かめた）。
 # セキュリティ更新はグループに入れない。待機もかからず、依存ごとにすぐ出る。
 # 自動マージの条件は automation/dependabot_merge.py にある。所有者のレビューの決まりは settings/ にある。
 version: 2
@@ -27,14 +29,6 @@ updates:
       patch:
         applies-to: version-updates
         update-types: [patch]
-      dev-minor:
-        applies-to: version-updates
-        dependency-type: development
-        update-types: [minor]
-      minor:
-        applies-to: version-updates
-        dependency-type: production
-        update-types: [minor]
 
   - package-ecosystem: uv
     directory: /api
@@ -53,14 +47,6 @@ updates:
       patch:
         applies-to: version-updates
         update-types: [patch]
-      dev-minor:
-        applies-to: version-updates
-        dependency-type: development
-        update-types: [minor]
-      minor:
-        applies-to: version-updates
-        dependency-type: production
-        update-types: [minor]
 
   - package-ecosystem: npm
     directory: /web
@@ -80,14 +66,6 @@ updates:
       patch:
         applies-to: version-updates
         update-types: [patch]
-      dev-minor:
-        applies-to: version-updates
-        dependency-type: development
-        update-types: [minor]
-      minor:
-        applies-to: version-updates
-        dependency-type: production
-        update-types: [minor]
 
   - package-ecosystem: terraform
     directory: /infra
@@ -106,9 +84,6 @@ updates:
       patch:
         applies-to: version-updates
         update-types: [patch]
-      minor:
-        applies-to: version-updates
-        update-types: [minor]
 
   # ランタイムと道具の版の正本は、pyproject.toml などにある。Dependabot はそこを書き換えられない。
   # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
@@ -132,9 +107,6 @@ updates:
       patch:
         applies-to: version-updates
         update-types: [patch]
-      minor:
-        applies-to: version-updates
-        update-types: [minor]
     ignore:
       # ランタイムの minor と major は、互換性の確認が要るので、人が上げる。
       - dependency-name: python

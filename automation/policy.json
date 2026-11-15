@@ -8,7 +8,5 @@
     "package-lock.json",
     ".terraform.lock.hcl"
   ],
-  "patch_group": "patch",
-  "dev_minor_group": "dev-minor",
   "app": "kazufuuu-dependabot-automerge"
 }
