@@ -265,7 +265,7 @@ Python と Node のランタイム、Terraform 本体のバージョンは、そ
 - 手元: Node は、nodenv や fnm などが `.node-version` のバージョンを入れます。Python は、uv が `.python-version` のバージョンを取得して使います
 - 手元のバージョンがずれていると、テストが落ちます。`tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、管理場所と比べます
 - CI: 「CI」の表のとおりです
-- 本番のイメージ: `api/Dockerfile` は、バージョンをビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`api/build.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
+- 本番のイメージ: `api/Dockerfile` は、イメージのタグとバージョンを、ビルドの引数（`PYTHON_TAG`、`UV_VERSION`）で受け取ります。`api/build.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
 
 uv は、バージョンを 1 点に固定するファイルを持ちません。ライブラリと同じ扱いです。
 
@@ -289,6 +289,11 @@ Python のバージョンの照合は、テストに持たせています。Depe
 
 Python、Node、Terraform の管理場所は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
 そこで、`dependabot/Dockerfile` を Dependabot 用の Dockerfile として置いています。ビルドしないファイルで、`FROM` にバージョンを並べただけのものです。
+
+イメージの種類（`slim`、`alpine` など）は、`.github/scripts/policy.json` の `image_variants` で、対象ごとに決めます。空の文字は、種類なしです。
+Dependabot 用の Dockerfile を読むときは、種類が設定とちょうど合う `FROM` の行だけを受け付けます。種類が違う行、種類の無い行、種類が 2 つ付いた行は、エラーで止まり、CI が落ちます。
+本番のイメージのビルドも、同じ設定から種類を取ります（`api/build.sh` が、バージョンに種類を付けたタグを `PYTHON_TAG` で渡します）。Dependabot がタグを確かめた相手と、本番がビルドで使うタグが、食い違いません。
+Dependabot は、種類の付いたタグを、同じ種類のままバージョンだけ上げました（`3.13.16-slim` から `3.13.18-slim`。[PR #101](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/101)）。`slim` 以外の種類では、確かめていません。
 
 1. Dependabot が、`dependabot/Dockerfile` のバージョンを上げる PR を出す。新しいバージョンを見つけること、cooldown、PR の作成は Dependabot の仕事
 2. `version-sync` の workflow が、Dependabot 用の Dockerfile のバージョンを `.python-version` などへ写し、その PR にコミットを積む

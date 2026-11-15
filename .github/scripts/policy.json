@@ -8,5 +8,10 @@
     "package-lock.json",
     ".terraform.lock.hcl"
   ],
-  "app": "kazufuuu-dependabot-automerge"
+  "app": "kazufuuu-dependabot-automerge",
+  "image_variants": {
+    "python": "slim",
+    "node": "slim",
+    "terraform": ""
+  }
 }

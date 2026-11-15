@@ -43,8 +43,6 @@ HUB_TAG = "https://hub.docker.com/v2/repositories/{repository}/tags/{tag}"
 BRANCH_PREFIX = "security-release/"
 LABELS = ("dependencies", "needs-review")
 NAMES = ("python", "node")
-# Dependabot 用の Dockerfile に -slim の付いたタグで書くイメージ。
-SLIM = ("python", "node")
 PLAIN = re.compile(r"\d+\.\d+\.\d+")
 ADVISORY = re.compile(r"[A-Za-z0-9-]{1,40}")
 
@@ -157,7 +155,7 @@ def image_published(name: str, version: Version) -> bool:
     """Docker Hub に、Dependabot 用の Dockerfile に書くタグのイメージがあるかを返す。"""
     image = versions.IMAGES[name]
     repository = image if "/" in image else f"library/{image}"
-    tag = show(version) + ("-slim" if name in SLIM else "")
+    tag = versions.tag(name, show(version))
     try:
         fetch_json(HUB_TAG.format(repository=repository, tag=tag))
     except urllib.error.HTTPError as error:

@@ -275,6 +275,7 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
 | 更新の対象 | `.github/dependabot.yml` に設定を足す。Python や Node のようなランタイムを足すときは、Dependabot 用の `dependabot/Dockerfile` に `FROM` を足し、`.github/scripts/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
 | ロックファイルの種類 | `.github/scripts/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
+| イメージの種類（`slim` を別の種類に替える） | `.github/scripts/policy.json` の `image_variants` を書き換え、`dependabot/Dockerfile` の `FROM` のタグを同じ種類に書き換える。本番のイメージのビルドは、同じ設定から種類を取るので、書き換えは要らない。設定と `FROM` が食い違うと、CI の `automation` が落ちる。`slim` 以外の種類で Dependabot が PR を出すところは、確かめていない |
 
 `uv run just apply-settings` は、`.github/repo-settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
 

@@ -20,7 +20,7 @@ FROM なので、dependabot/Dockerfile を Dependabot 用の Dockerfile とし�
 このスクリプトの sync は、Dependabot 用の Dockerfile のバージョンを .python-version などへ写すだけを行う。新しいバージョンは探さない。
 
 使い方:
-  versions.py show          管理場所のバージョンと、uv.lock の uv と just のバージョンを key=value で出す
+  versions.py show          管理場所のバージョンと、uv.lock の uv と just のバージョン、イメージのタグを key=value で出す
   versions.py check         管理場所と Dependabot 用の Dockerfile が揃っていることを確かめる
   versions.py sync          Dependabot 用の Dockerfile のバージョンを .python-version などへ写す（Dependabot の PR に対して、workflow が動かす）
   versions.py align         管理場所のバージョンを Dependabot 用の Dockerfile へ写す（人が管理場所を書き換えたあとに動かす）
@@ -29,6 +29,7 @@ FROM なので、dependabot/Dockerfile を Dependabot 用の Dockerfile とし�
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -48,6 +49,11 @@ IMAGES = {
 }
 
 VERSION = r"\d+\.\d+\.\d+"
+
+# イメージの種類（slim、alpine、slim-bookworm など）は、policy.json の image_variants で決める。空の文字は、種類なし。
+# Dependabot 用の Dockerfile も、本番のイメージのビルドも、ここから種類を取る。
+POLICY_PATH = Path(__file__).with_name("policy.json")
+VARIANT = r"[a-z0-9]+(?:[.-][a-z0-9]+)*"
 
 
 class VersionError(Exception):
@@ -97,14 +103,39 @@ def locked(root: Path, name: str) -> str:
     return one(pattern, (root / UV_LOCK).read_text(), f"{UV_LOCK} の {LOCKED[name]}").group(1)
 
 
+def load_variants(path: Path = POLICY_PATH) -> dict[str, str]:
+    """イメージの種類を、設定から読む。決めていない対象や、形の違う種類があれば失敗させる。"""
+    configured = json.loads(path.read_text()).get("image_variants", {})
+    variants: dict[str, str] = {}
+    for name in IMAGES:
+        if name not in configured:
+            raise VersionError(f"{path.name}: image_variants に {name} がありません")
+        variant = configured[name]
+        if variant and not re.fullmatch(VARIANT, variant):
+            raise VersionError(f"{path.name}: image_variants の {name} の形が違います: {variant}")
+        variants[name] = variant
+    return variants
+
+
+VARIANTS = load_variants()
+
+
+def tag(name: str, version: str) -> str:
+    """イメージのタグを返す。バージョンに、設定で決めた種類を付ける。"""
+    return f"{version}-{VARIANTS[name]}" if VARIANTS[name] else version
+
+
+def find_stage(text: str, name: str) -> re.Match[str]:
+    """Dependabot 用の Dockerfile から、対象の FROM の行を探す。種類が設定とちょうど合う行だけを受け付ける。"""
+    suffix = re.escape(tag(name, ""))
+    pattern = rf"^FROM\s+{re.escape(IMAGES[name])}:({VERSION}){suffix}\s+AS\s+{name}\s*$"
+    return one(pattern, text, f"{SENTINEL} の {name}（{IMAGES[name]}:{tag(name, '<バージョン>')} の形）")
+
+
 def read_sentinel(root: Path) -> dict[str, str]:
     """Dependabot 用の Dockerfile からバージョンを読む。"""
     text = (root / SENTINEL).read_text()
-    versions: dict[str, str] = {}
-    for name, image in IMAGES.items():
-        pattern = rf"^FROM\s+{re.escape(image)}:({VERSION})(?:-slim)?\s+AS\s+{name}\s*$"
-        versions[name] = one(pattern, text, f"{SENTINEL} の {name}").group(1)
-    return versions
+    return {name: find_stage(text, name).group(1) for name in IMAGES}
 
 
 def images_outside_docker_hub(text: str) -> list[str]:
@@ -167,9 +198,8 @@ def align(root: Path) -> list[str]:
     file = root / SENTINEL
     text = file.read_text()
     changed: list[str] = []
-    for name, image in IMAGES.items():
-        pattern = rf"^FROM\s+{re.escape(image)}:({VERSION})(?:-slim)?\s+AS\s+{name}\s*$"
-        match = one(pattern, text, f"{SENTINEL} の {name}")
+    for name in IMAGES:
+        match = find_stage(text, name)
         if match.group(1) != actual[name]:
             text = text[: match.start(1)] + actual[name] + text[match.end(1) :]
             changed.append(name)
@@ -206,6 +236,8 @@ def main() -> int:
                 print(f"{name}={version}")
             for name in LOCKED:
                 print(f"{name}={locked(args.root, name)}")
+            for name, version in read_sources(args.root).items():
+                print(f"{name}_tag={tag(name, version)}")
         elif args.command == "sync":
             for path in sync(args.root):
                 print(path)

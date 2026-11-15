@@ -1,6 +1,7 @@
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import versions
@@ -121,6 +122,44 @@ class VersionsTest(unittest.TestCase):
         file.write_text(file.read_text() + "FROM node:24.1.0-slim AS node\n")
         with self.assertRaises(versions.VersionError):
             versions.read_sentinel(self.root)
+
+    def test_variant_must_match_the_setting_exactly(self):
+        """種類が設定と違う行、種類が無い行、種類が 2 つ付いた行は、受け付けない。"""
+        current = versions.read_sentinel(self.root)["python"]
+        for line in (f"python:{current}-alpine", f"python:{current}", f"python:{current}-slim-bookworm"):
+            with self.subTest(line=line):
+                self.edit(versions.SENTINEL, f"python:{current}-slim", line)
+                with self.assertRaises(versions.VersionError):
+                    versions.read_sentinel(self.root)
+                self.assertEqual(len(versions.check(self.root)), 1)
+                self.edit(versions.SENTINEL, line + " AS python", f"python:{current}-slim AS python")
+
+    def test_variant_comes_from_the_setting(self):
+        """種類なし、alpine、ハイフンの入る種類も、設定を変えれば読める。align は種類を保つ。"""
+        current = versions.read_sentinel(self.root)["python"]
+        for variant, suffix in (("", ""), ("alpine", "-alpine"), ("slim-bookworm", "-slim-bookworm"), ("alpine3.22", "-alpine3.22")):
+            with self.subTest(variant=variant), mock.patch.dict(versions.VARIANTS, {"python": variant}):
+                self.assertEqual(versions.tag("python", "3.13.99"), "3.13.99" + suffix)
+                with self.assertRaises(versions.VersionError):
+                    versions.read_sentinel(self.root)
+                self.edit(versions.SENTINEL, f"python:{current}-slim AS python", f"python:{current}{suffix} AS python")
+                self.assertEqual(versions.read_sentinel(self.root)["python"], current)
+                (self.root / versions.PYTHON_VERSION_FILE).write_text("3.13.99\n")
+                self.assertEqual(versions.align(self.root), ["python"])
+                self.assertIn(f"FROM python:3.13.99{suffix} AS python", (self.root / versions.SENTINEL).read_text())
+                (self.root / versions.PYTHON_VERSION_FILE).write_text(current + "\n")
+                versions.align(self.root)
+                self.edit(versions.SENTINEL, f"python:{current}{suffix} AS python", f"python:{current}-slim AS python")
+
+    def test_variant_setting_is_validated(self):
+        policy = self.root / "policy.json"
+        for text in ('{"image_variants": {"python": "slim", "node": "slim"}}', '{"image_variants": {"python": "slim AS x", "node": "", "terraform": ""}}', "{}"):
+            with self.subTest(text=text):
+                policy.write_text(text)
+                with self.assertRaises(versions.VersionError):
+                    versions.load_variants(policy)
+        policy.write_text('{"image_variants": {"python": "slim-bookworm", "node": "", "terraform": ""}}')
+        self.assertEqual(versions.load_variants(policy)["python"], "slim-bookworm")
 
     def test_image_outside_docker_hub_is_reported(self):
         self.edit(versions.SENTINEL, "FROM hashicorp/terraform:", "FROM ghcr.io/hashicorp/terraform:")
