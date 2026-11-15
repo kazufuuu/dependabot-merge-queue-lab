@@ -3,10 +3,13 @@
 # uv ではこの値が効かないので、指定しない。pyproject.toml の [project] に description があり、
 # その名前が PyPI に無いと、Dependabot はライブラリとみなして範囲を広げる方針を選ぶ。
 # この方針では、範囲の中の更新は uv.lock だけが変わり、範囲を超える更新は pyproject.toml も変わる。
-# グループは patch だけにする。minor と major は、依存ごとに 1 本ずつ出す。
-# 注意: minor をグループにしない。グループの PR が開いていると、Dependabot はそのディレクトリの
-# 全部の依存を処理済みとみなし、ほかのグループを飛ばす。minor のグループの PR が人の判断を
-# 待っている間、patch の PR が出なくなり、自動マージが止まる（実物で確かめた）。
+# PR にまとめるのは、版が連動するライブラリ群だけにする（npm の vitest の群）。
+# それ以外は、patch も minor も major も、依存ごとに 1 本ずつ出す。
+# 注意: 更新の種類（patch、minor）でまとめるグループを作らない。種類のグループの PR が開いていると、
+# Dependabot はそのディレクトリの全部の依存を処理済みとみなし、ほかの更新を出さなくなる。
+# minor のグループの PR が人の判断を待っている間、patch の自動マージが止まった（実物で確かめた）。
+# open-pull-requests-limit は、依存の数より大きくする。人の判断待ちの PR で埋まると、patch の PR も出なくなる。
+# 例外は github-actions。人が判断するので、patch、minor、major を 1 本にまとめる。
 # セキュリティ更新はグループに入れない。待機もかからず、依存ごとにすぐ出る。
 # 自動マージの条件は automation/dependabot_merge.py にある。所有者のレビューの決まりは settings/ にある。
 version: 2
@@ -21,14 +24,10 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
-    groups:
-      patch:
-        applies-to: version-updates
-        update-types: [patch]
 
   - package-ecosystem: uv
     directory: /api
@@ -39,14 +38,10 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
-    groups:
-      patch:
-        applies-to: version-updates
-        update-types: [patch]
 
   - package-ecosystem: npm
     directory: /web
@@ -58,14 +53,15 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
     groups:
-      patch:
+      # vitest と、その部品（@vitest/...）は、同じ版で一緒に上げる。版が食い違うと動かない。
+      vitest:
         applies-to: version-updates
-        update-types: [patch]
+        patterns: ["vitest", "@vitest/*"]
 
   - package-ecosystem: terraform
     directory: /infra
@@ -76,14 +72,10 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
-    groups:
-      patch:
-        applies-to: version-updates
-        update-types: [patch]
 
   # ランタイムと道具の版の正本は、pyproject.toml などにある。Dependabot はそこを書き換えられない。
   # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
@@ -99,14 +91,10 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
-    groups:
-      patch:
-        applies-to: version-updates
-        update-types: [patch]
     ignore:
       # ランタイムの minor と major は、互換性の確認が要るので、人が上げる。
       - dependency-name: python
@@ -123,7 +111,7 @@ updates:
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     assignees: [kazufusa]
     commit-message:
       prefix: deps
