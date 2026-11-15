@@ -4,27 +4,27 @@
 version: 'v0.0.3'
 workflows:
     '.github/workflows/ci.yml':
-        - 'actions/cache@v6'
-        - 'actions/checkout@v6'
+        - 'actions/cache@v6.0.0'
+        - 'actions/checkout@v6.0.3'
         - 'actions/setup-node@v7.0.0'
         - 'astral-sh/setup-uv@v10.3.2'
-        - 'hashicorp/setup-terraform@v4'
+        - 'hashicorp/setup-terraform@v4.0.0'
     '.github/workflows/dependabot-merge.yml':
-        - 'actions/checkout@v6'
+        - 'actions/checkout@v6.0.3'
     '.github/workflows/dependabot-stats.yml':
-        - 'actions/checkout@v6'
+        - 'actions/checkout@v6.0.3'
     '.github/workflows/security-release.yml':
-        - 'actions/checkout@v6'
+        - 'actions/checkout@v6.0.3'
     '.github/workflows/version-sync.yml':
-        - 'actions/checkout@v6'
+        - 'actions/checkout@v6.0.3'
 dependencies:
-    'actions/cache@v6':
-        ref: 'v6'
+    'actions/cache@v6.0.0':
+        ref: 'v6.0.0'
         commit: 'sha1-2c8a9bd7457de244a408f35966fab2fb45fda9c8'
         owner_id: 44036562
         repo_id: 215566462
-    'actions/checkout@v6':
-        ref: 'v6'
+    'actions/checkout@v6.0.3':
+        ref: 'v6.0.3'
         commit: 'sha1-df4cb1c069e1874edd31b4311f1884172cec0e10'
         owner_id: 44036562
         repo_id: 197814629
@@ -38,8 +38,8 @@ dependencies:
         commit: 'sha1-07a047e608db84b3d8c06cd9a7c7dcc9c355c18e'
         owner_id: 115962839
         repo_id: 846733598
-    'hashicorp/setup-terraform@v4':
-        ref: 'v4'
+    'hashicorp/setup-terraform@v4.0.0':
+        ref: 'v4.0.0'
         commit: 'sha1-5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85'
         owner_id: 761456
         repo_id: 258271226

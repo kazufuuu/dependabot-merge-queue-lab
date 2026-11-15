@@ -213,6 +213,29 @@ Renovate は、`.python-version` や `.tool-versions` を直接書き換えら�
 
 見張り役のイメージは Docker Hub のものに限ります。待機が Docker Hub のイメージにしか効かないためです。ほかのレジストリのイメージを書くと、検査が落ちます。
 
+### GitHub Actions の版
+
+workflow が使う action は、GitHub の workflow のロックファイル（`.github/workflows/actions.lock`）で、コミットに固定しています。
+workflow の `uses:` にはタグ（`actions/checkout@v6.0.3`）を書きます。実際に動くのは、ロックファイルに記録したコミットです。
+ロックファイルは `gh actions-lock`（GitHub 公式の `gh` の拡張）が作ります。手では編集しません。
+
+`uses:` を足したり変えたりしたときは、`gh actions-lock` を動かして、ロックファイルも一緒にコミットします。
+ロックファイルに無い action を使う workflow は、ランナーが止めます。
+
+Dependabot は、action を上げる PR で、workflow のファイルとロックファイルの両方を書き換えます。
+ライブラリと違い、patch の更新でも workflow のファイルが変わるので、action の更新は、すべて人が判断します。
+`uses:` の書き方を変えて、実物で確かめた結果です。
+
+| `uses:` の書き方 | Dependabot の動き | 証拠 |
+|---|---|---|
+| 完全なタグ（`@v10.3.2`） | patch でも minor でも、workflow のファイルとロックファイルの両方を変える | [PR #63]({U}/pull/63)（patch）、[PR #64]({U}/pull/64)（minor） |
+| major だけのタグ（`@v6`） | major の更新だけを出す。patch と minor の更新は出ない。ロックファイルのコミットは、人が `gh actions-lock --relock` を動かすまで古いまま | [実行 43681122355]({U}/actions/runs/43681122355)（`actions/cache@v6` に更新が出なかった） |
+
+そのため、`uses:` は完全なタグで書きます。major だけのタグで書くと、更新の取りこぼしになります。
+major のタグを持たない action もあります（`astral-sh/setup-uv` に `v10` は無い）。
+
+この機能は新しく、書式と道具は変わることがあります。拡張は v0.4.1 で確かめました。
+
 ### 待機
 
 `cooldown` を 7 日にしています。公開から 7 日たつまで、その版は提案されません。
