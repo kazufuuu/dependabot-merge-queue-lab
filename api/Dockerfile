@@ -1,5 +1,5 @@
 # バージョンはビルドの引数で受け取る。Python は .python-version、uv は直下の uv.lock のバージョンを使う。
-# 引数を付け忘れると、FROM が成り立たずに失敗する。scripts/build-api.sh が管理場所から渡す。
+# 引数を付け忘れると、FROM が成り立たずに失敗する。api/build.sh が管理場所から渡す。
 ARG PYTHON_VERSION
 ARG UV_VERSION
 

@@ -115,7 +115,7 @@ class ChangedFilesTest(unittest.TestCase):
     """Python と Node は、別々の PR にする。片方の PR に、もう片方の変更が混ざらない。"""
 
     def setUp(self):
-        repo = Path(__file__).resolve().parent.parent
+        repo = Path(__file__).resolve().parents[2]
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root)
         for path in (versions.SENTINEL, *set(versions.SOURCES.values()), "api/Dockerfile"):

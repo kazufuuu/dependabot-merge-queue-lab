@@ -18,7 +18,7 @@ from pathlib import Path
 
 from dependabot_merge import gh
 
-CONFIG = Path(__file__).resolve().parent.parent / ".github" / "dependabot.yml"
+CONFIG = Path(__file__).resolve().parents[2] / ".github" / "dependabot.yml"
 TITLE = "Dependabot の PR が上限に近づいています"
 DEFAULT_LIMIT = 5
 # 残りがこの本数以下になったら知らせる。

@@ -38,25 +38,25 @@ infra:
 
 # 仕組み（振り分け、バージョンの同期）のテストと、バージョンが揃っていることの確認
 automation:
-    python3 -m unittest discover -s automation
-    python3 automation/versions.py check
+    python3 -m unittest discover -s .github/scripts
+    python3 .github/scripts/versions.py check
 
 # 本番の API のイメージをビルドする（引数は docker build に渡る。例: just image -t api）
 image *args:
-    scripts/build-api.sh {{ args }}
+    api/build.sh {{ args }}
 
 # 使っているバージョン（Python、Node、Terraform、uv、just）を出す
 versions:
-    @python3 automation/versions.py show
+    @python3 .github/scripts/versions.py show
 
 # .python-version、.node-version、infra/versions.tf を書き換えたあとに動かす。Dependabot 用のファイルを揃える
 align:
-    python3 automation/versions.py align
-    python3 automation/versions.py check
+    python3 .github/scripts/versions.py align
+    python3 .github/scripts/versions.py check
 
 # Dependabot の PR で、バージョンの同期が失敗したときに動かす。versions/Dockerfile のバージョンを、.python-version などへ写す
 sync:
-    python3 automation/versions.py sync
+    python3 .github/scripts/versions.py sync
 
 # pyproject.toml の範囲を書き換えたあとに動かす。uv.lock と api/uv.lock を作り直す
 lock-python:
@@ -75,4 +75,4 @@ lock-actions:
 
 # リポジトリの設定、environment、ruleset を反映する（組織の所有者が動かす。例: just apply-settings owner/repo）
 apply-settings repo:
-    settings/apply.sh {{ repo }}
+    .github/settings/apply.sh {{ repo }}

@@ -251,7 +251,7 @@ def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
     return (
         f"{name} を {old} から {new} に上げます。セキュリティアップデートなので、cooldown を置かずに出しています。\n\n"
         f"{basis}\n\n"
-        "`automation/security_release.py` が出しました。自動ではマージされません。レビューをお願いします。"
+        "`.github/scripts/security_release.py` が出しました。自動ではマージされません。レビューをお願いします。"
     )
 
 
@@ -293,7 +293,7 @@ def open_pull_requests(repo: str, root: Path, targets: list[dict]) -> None:
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     repo = os.environ["GITHUB_REPOSITORY"]
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parents[2]
     try:
         if mode == "find":
             find(repo, root)

@@ -7,6 +7,22 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 要件の一覧は [docs/requirements.md](docs/requirements.md) にあります。
 要件ごとの達成の状況は [docs/status.md](docs/status.md) にあります。
 
+## ディレクトリの見取り図
+
+`.github` の下が仕組みで、ほかは見本のコードです。
+
+| 場所 | 中身 | ほかのリポジトリへ持っていくか |
+|---|---|---|
+| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
+| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
+| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト | 持っていく |
+| `versions/Dockerfile` | Dependabot 用の Dockerfile | 持っていく |
+| `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
+| `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
+| `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード | 持っていかない |
+
+`.github/scripts/` のスクリプトは、Python の標準ライブラリだけで書いてあります。App の鍵を持つ job の中で動くので、外部のパッケージを入れない形にしています。テストも、同じ理由で unittest です。
+
 ## バージョンの管理場所
 
 バージョンを確かめるときと、変えるときに見るファイルは、次のとおりです。範囲と実際のバージョンが分かれるものは、「範囲 → 実際のバージョン」の順に書いています。
@@ -99,7 +115,7 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 
 - 実物で確かめました。上限を 3 に下げ、人の判断待ちが 4 本ある状態にすると、patch の PR は作られませんでした。Dependabot の実行は成功し、ログには「created」と出ます（[実行 43684334942](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43684334942)）。エラーは出ません
 - 上限を 10 に戻すと、同じ PR が出て、自動でマージされました（[PR #87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）
-- 気づき方: 残りが 2 本以下になると、「Dependabot の PR が上限に近づいています」という Issue が 1 件立ちます。`dependabot-merge` の workflow が、毎時、設定ごとの本数を数えています（`automation/dependabot_limit.py`）。本数が減ると、Issue は自動で閉じます
+- 気づき方: 残りが 2 本以下になると、「Dependabot の PR が上限に近づいています」という Issue が 1 件立ちます。`dependabot-merge` の workflow が、毎時、設定ごとの本数を数えています（`.github/scripts/dependabot_limit.py`）。本数が減ると、Issue は自動で閉じます
 - 直し方: 人の判断待ちの PR（`needs-review` ラベル）を、マージするか閉じます
 - セキュリティアップデートの PR は、別の枠で出る決まりです。このリポジトリでは確かめていません
 
@@ -134,7 +150,7 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 ### 振り分け
 
 `.github/workflows/dependabot-merge.yml` が、開いている Dependabot の PR を見直します。
-CI が終わったとき、毎時、手動の 3 通りで動きます。判定は `automation/dependabot_merge.py` にあります。
+CI が終わったとき、毎時、手動の 3 通りで動きます。判定は `.github/scripts/dependabot_merge.py` にあります。
 
 - 判定は main のバージョンで動きます。PR の中身は実行しません
 - 種別は、Dependabot がコミットメッセージに書くメタデータで判定します
@@ -162,8 +178,8 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 | 変えたいこと | 変える場所 |
 |---|---|
-| 割り振る人数 | `automation/policy.json` の `review_count`。`settings/apply.sh` が team の設定に反映する |
-| マージに要る承認の数 | `settings/ruleset.json` の `required_approving_review_count` |
+| 割り振る人数 | `.github/scripts/policy.json` の `review_count`。`.github/settings/apply.sh` が team の設定に反映する |
+| マージに要る承認の数 | `.github/settings/ruleset.json` の `required_approving_review_count` |
 | 所有者を増やす、減らす | team のメンバーを変える |
 
 2 人に割り振っても、承認の数が 1 のままなら、どちらか 1 人の承認で通ります。
@@ -220,12 +236,12 @@ CI が落ちた patch も、題名の形は自動でマージされる PR と同
 
 | job | 内容 | バージョンの読み方 |
 |---|---|---|
-| `workspace` | workspace の lint とテスト | setup-python が `.python-version` の Python を入れる。`automation/versions.py show` が `uv.lock` から uv のバージョンを読み、setup-uv に渡す |
+| `workspace` | workspace の lint とテスト | setup-python が `.python-version` の Python を入れる。`.github/scripts/versions.py show` が `uv.lock` から uv のバージョンを読み、setup-uv に渡す |
 | `api` | API のテスト | 同上 |
 | `web` | 型チェックとテスト | setup-node が `.node-version` を読む |
-| `infra` | Terraform の書式、検証、テスト | `automation/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
+| `infra` | Terraform の書式、検証、テスト | `.github/scripts/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
 | `automation` | 振り分けとバージョンの同期のテスト、バージョンが揃っていることの確認 | runner の Python |
-| `image` | API のイメージのビルド | `scripts/build-api.sh` が `.python-version` と `uv.lock` から読み、ビルドの引数で渡す |
+| `image` | API のイメージのビルド | `api/build.sh` が `.python-version` と `uv.lock` から読み、ビルドの引数で渡す |
 
 `image` は、テストを動かしません。依存を入れてイメージをビルドするだけです。ビルドしたイメージの起動は確かめません。
 runner にはコンパイラが入っていますが、slim のイメージには入っていません。テストが通っても、イメージのビルドが落ちる更新があるので、毎回確かめます。ビルドの層はキャッシュします。
@@ -249,12 +265,12 @@ Python と Node のランタイム、Terraform 本体のバージョンは、そ
 - 手元: Node は、nodenv や fnm などが `.node-version` のバージョンを入れます。Python は、uv が `.python-version` のバージョンを取得して使います
 - 手元のバージョンがずれていると、テストが落ちます。`tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、管理場所と比べます
 - CI: 「CI」の表のとおりです
-- 本番のイメージ: `api/Dockerfile` は、バージョンをビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`scripts/build-api.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
+- 本番のイメージ: `api/Dockerfile` は、バージョンをビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`api/build.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
 
 uv は、バージョンを 1 点に固定するファイルを持ちません。ライブラリと同じ扱いです。
 
 - 直下の `pyproject.toml` の開発用の依存に、範囲（`uv>=0.13,<0.14`）で書きます。バージョンは `uv.lock` が決めます
-- CI と本番のイメージは、`uv.lock` のバージョンを使います。`automation/versions.py show` が読んで渡します
+- CI と本番のイメージは、`uv.lock` のバージョンを使います。`.github/scripts/versions.py show` が読んで渡します
 - 手元の uv は、古すぎなければ構いません。下限は `[tool.uv] required-version`（`>=0.13`）で、これより古い uv は止まります
 - uv の更新は、直下の uv の設定から、ほかのライブラリと同じ形で出ます。patch はロックファイルだけが変わり、自動でマージされます（[PR #93](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/93)。0.13.5 から 0.13.7、PR が出てから 2 分 24 秒）
 - uv は、何を入れるかをロックファイルで決める道具です。バージョンが少し違っても、入るものは同じです。そのため、手元まで patch を揃えることはしていません
@@ -290,7 +306,7 @@ Node を patch だけに絞らないのは、Node のバージョンの出し方
 ランタイムや Terraform 本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。反応が無いこともあります（[マニュアル](docs/manual.md)の「調べ方」）。バージョンを写すコミットが足されているので、`@dependabot rebase` は断られます。
 Dependabot 用の Dockerfile の `FROM` の間には、行を挟んでいます。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突するためです。
 
-`version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。
+`version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`.github/scripts/versions.py` の `sync`）。
 
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、バージョンを写します
 - push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、管理場所の 3 つ（`.python-version`、`.node-version`、`infra/versions.tf`）に限っています
@@ -367,7 +383,7 @@ minor や major になる修正、manifest が変わる修正、CI が落ちる�
 
 コンテナのイメージには、Dependabot のセキュリティアップデートがありません。
 そこで、`.github/workflows/security-release.yml` が 4 時間ごとに、Python と Node のセキュリティアップデートを探します。
-見つけると、Dependabot 用の Dockerfile と管理場所をそのバージョンにする PR を、App が出します。判定は `automation/security_release.py` にあります。
+見つけると、Dependabot 用の Dockerfile と管理場所をそのバージョンにする PR を、App が出します。判定は `.github/scripts/security_release.py` にあります。
 
 | 対象 | 見分け方 |
 |---|---|
@@ -443,14 +459,14 @@ minor や major を上げるなど、人が意図してバージョンを変え�
 
 ## 設定の反映
 
-`uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `settings/apply.sh` です。
+`uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `.github/settings/apply.sh` です。
 ruleset は 4 つです。
 
-- `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須のチェック、マージキュー
-- `owners-lockfiles` と `owners-others`: 所有者のレビュー。`settings/owner_rulesets.py` が、`automation/policy.json` のロックファイルの名前、team、App から作る
-- `tags`: タグの保護（`settings/ruleset-tags.json`）
+- `main`: main の保護（`.github/settings/ruleset.json`）。PR、承認 1 件、必須のチェック、マージキュー
+- `owners-lockfiles` と `owners-others`: 所有者のレビュー。`.github/settings/owner_rulesets.py` が、`.github/scripts/policy.json` のロックファイルの名前、team、App から作る
+- `tags`: タグの保護（`.github/settings/ruleset-tags.json`）
 
-GitHub App は `settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
+GitHub App は `.github/settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
 App の作成をほかの部門に頼むときの依頼書は [docs/app-request.md](docs/app-request.md) です。
 
 ## 範囲の見直し

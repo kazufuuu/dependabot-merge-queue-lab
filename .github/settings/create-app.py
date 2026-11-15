@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """自動マージ用の GitHub App を作り、鍵を environment に登録する。
 
-使い方: settings/create-app.py <owner>/<repo> [--name <App の名前>] [--port <番号>]
+使い方: .github/settings/create-app.py <owner>/<repo> [--name <App の名前>] [--port <番号>]
 
 画面での操作は、ボタンを 2 回押すことと、install 先を選ぶことだけになる。
 1. 表示された URL を開き、ボタンを押す。GitHub の画面で App の作成を確かめる

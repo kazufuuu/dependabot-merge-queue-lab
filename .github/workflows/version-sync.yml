@@ -35,7 +35,7 @@ jobs:
         id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 automation/version_sync.py prepare
+        run: python3 .github/scripts/version_sync.py prepare
       - name: 変わったファイルを集める
         id: collect
         if: steps.prepare.outputs.number != ''
@@ -43,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.prepare.outputs.number }}
           PR_HEAD: ${{ steps.prepare.outputs.head }}
-        run: python3 automation/version_sync.py collect
+        run: python3 .github/scripts/version_sync.py collect
 
   # 鍵を持つ。渡されたファイルを PR のブランチにコミットするだけで、PR の中身は取り出さない。
   push:
@@ -67,4 +67,4 @@ jobs:
           PAYLOAD: ${{ needs.compute.outputs.payload }}
           AUTOMERGE_APP_ID: ${{ vars.AUTOMERGE_APP_ID }}
           AUTOMERGE_APP_PRIVATE_KEY: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
-        run: python3 automation/version_sync.py push
+        run: python3 .github/scripts/version_sync.py push

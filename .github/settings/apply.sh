@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # リポジトリの設定と ruleset を、このディレクトリの内容に合わせる。
-# 使い方: settings/apply.sh <owner>/<repo>
+# 使い方: .github/settings/apply.sh <owner>/<repo>
 set -euo pipefail
-repo="${1:?usage: settings/apply.sh <owner>/<repo>}"
+repo="${1:?usage: .github/settings/apply.sh <owner>/<repo>}"
 dir="$(cd "$(dirname "$0")" && pwd)"
 
 gh api -X PATCH "repos/$repo" \
@@ -41,9 +41,9 @@ for file in "$dir/ruleset.json" "$dir/ruleset-tags.json" "$generated"/ruleset-ow
     gh api -X POST "repos/$repo/rulesets" --input "$file" >/dev/null
   fi
 done
-# レビューの依頼を、team の中の決めた人数に割り振る。人数は automation/policy.json の review_count。
-team="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_team"])' "$dir/../automation/policy.json")"
-count="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_count"])' "$dir/../automation/policy.json")"
+# レビューの依頼を、team の中の決めた人数に割り振る。人数は .github/scripts/policy.json の review_count。
+team="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_team"])' "$dir/../scripts/policy.json")"
+count="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["review_count"])' "$dir/../scripts/policy.json")"
 team_id="$(gh api graphql -f query='query($org: String!, $team: String!) { organization(login: $org) { team(slug: $team) { id } } }' \
   -f org="${repo%%/*}" -f team="$team" --jq '.data.organization.team.id')"
 gh api graphql -f query='mutation($id: ID!, $count: Int!) {

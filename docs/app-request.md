@@ -111,7 +111,7 @@ App のトークンを使う job は 3 つです。どれも main のバージ�
 - 署名は、GitHub の API が返す `wasSignedByGitHub` を見ます。Dependabot のコミットは、GitHub 自身の鍵（署名者は `web-flow`）で署名されます。人が自分の鍵で署名したコミットは、署名が有効でも対象にしません
 - head を push した主体は、その head で CI を起こした主体（workflow の実行の `actor`）で確かめます。過去の本物のコミットを人が別のブランチへ持ってきた場合は、主体が人になるので対象にしません
 
-判定の実装は `automation/dependabot_merge.py` の `classify` と `normalize` です。
+判定の実装は `.github/scripts/dependabot_merge.py` の `classify` と `normalize` です。
 
 App がしないことは次のとおりです。
 
@@ -127,14 +127,15 @@ App がしないことは次のとおりです。
 |---|---|
 | 判定は main に入っているバージョンで動く | PR の中身で判定を書き換えられない。判定を変えるには、所有者のレビューを通す必要がある |
 | 鍵は environment `automerge` の secret に置く。この environment は main だけが使える | main 以外のブランチの workflow は、鍵を読めない |
+| 鍵を持つ job で動くスクリプト（`.github/scripts/`）は、Python の標準ライブラリだけで書く。外部のパッケージを入れない | 入れたパッケージに悪意があっても、鍵に触れられる、ということが起きない。入れるものが無いため |
 | ブランチ保護（ruleset）で、すべてのファイルに所有者のレビューを必須にする。ロックファイルの規則だけ、App を対象から外す | App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られる。人が出した PR は、ロックファイルだけでも所有者の承認が要る |
 | 必須のチェックは、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
 | マージキューで、最新の main と合わせて CI を動かし直す | 単独では通るが、合わせると壊れる変更が入らない |
 
 鍵を使う job は、PR の中身を取り出しません。実行もしません。次の 2 か所で確かめられます。
 
-- `.github/workflows/dependabot-merge.yml` の `merge` job。`actions/checkout` の `ref` が既定のブランチ（main）で、動かすのは main の `automation/dependabot_merge.py` だけ
-- `automation/dependabot_merge.py`。PR については GitHub の API を呼ぶだけで、PR のブランチを取得する処理も、PR のファイルを実行する処理も無い
+- `.github/workflows/dependabot-merge.yml` の `merge` job。`actions/checkout` の `ref` が既定のブランチ（main）で、動かすのは main の `.github/scripts/dependabot_merge.py` だけ
+- `.github/scripts/dependabot_merge.py`。PR については GitHub の API を呼ぶだけで、PR のブランチを取得する処理も、PR のファイルを実行する処理も無い
 
 ## 悪用への備え
 
@@ -158,7 +159,7 @@ App がしないことは次のとおりです。
 
 試していない偽装が 2 つあります。
 
-- 人が、GitHub に登録した自分の鍵で署名し、作者を Dependabot と偽ったコミット。試験に使える登録済みの鍵が無く、実物では試していません。判定は `wasSignedByGitHub` が偽のコミットを弾きます。この分岐は `automation/test_dependabot_merge.py` の `SignatureTest` で確かめています。head を push した主体の条件でも弾かれます
+- 人が、GitHub に登録した自分の鍵で署名し、作者を Dependabot と偽ったコミット。試験に使える登録済みの鍵が無く、実物では試していません。判定は `wasSignedByGitHub` が偽のコミットを弾きます。この分岐は `.github/scripts/test_dependabot_merge.py` の `SignatureTest` で確かめています。head を push した主体の条件でも弾かれます
 - GitHub の画面で作ったコミット（GitHub の鍵で署名される）。画面では作者が操作した人になり、Dependabot を名乗れません。Dependabot の PR に積むと、コミットが 2 つになるか、head を push した主体が人になります
 
 条件 4 は、この検証の途中で足しました。足す前は、人が Dependabot のコミットに戻した PR #34 が自動マージされました（14:34 に kazufusa が戻し、14:36 にマージ）。入った内容は Dependabot が作ったものですが、過去の更新を人の判断で入れ直せる状態でした。足したあとは、同じ操作が弾かれます（上の表の 3 行目）。
@@ -173,7 +174,7 @@ App がしないことは次のとおりです。
 - 開発者も、開発に使う AI エージェントも、鍵の中身を見ない。secret は、登録したあとは誰も読み出せない
 
 担当者が単独で実行できる手順とコマンドは、[github-app.md](github-app.md) の「手作業での用意」にあります。この手順の画面操作は、検証用の組織では試していません。
-検証用の組織では、同じ内容をスクリプト（`settings/create-app.py`）で行いました。スクリプトも、鍵を画面とファイルに残しません。
+検証用の組織では、同じ内容をスクリプト（`.github/settings/create-app.py`）で行いました。スクリプトも、鍵を画面とファイルに残しません。
 
 登録には、リポジトリの管理者の権限が要ります。担当者に権限が無い場合は、environment の作成までを開発側が行い、登録のあいだだけ権限を渡す形を相談させてください。
 
@@ -197,7 +198,7 @@ App がしないことは次のとおりです。
 | main へのマージ | ruleset。PR、承認、CI、マージキューを通す必要がある。ロックファイル以外には、所有者のレビューも要る | CI が落ちた PR と、ロックファイル以外を変える PR は、マージキューにも直接のマージにも拒否された（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
 | main への直接の push、main の削除 | ruleset `main`。対象から外す主体は登録していない | 人のアカウントで、push が拒否されることを確かめた。App では試していない |
 | main 以外のブランチへの push、作成、削除 | 止めない | 試していない |
-| タグの作成、更新、削除。リリースの作成 | タグの ruleset（`settings/ruleset-tags.json`）。管理者だけがタグを作れる | ruleset は入れた。App で拒否されることは試していない |
+| タグの作成、更新、削除。リリースの作成 | タグの ruleset（`.github/settings/ruleset-tags.json`）。管理者だけがタグを作れる | ruleset は入れた。App で拒否されることは試していない |
 | workflow のファイル（`.github/workflows/`）の変更 | App に Workflows の権限が無い | 試していない |
 | PR へのコメント、ラベル、レビュー依頼、クローズ | 止めない | 試していない |
 | ほかのリポジトリへの操作 | install 先がこのリポジトリだけ | install 先は API で確かめた |
@@ -219,7 +220,7 @@ App がしないことは次のとおりです。
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 53 回です（2026-11-14 に 15 回、11-15 に 38 回）。
+そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 54 回です（2026-11-14 に 15 回、11-15 に 39 回）。
 11-15 の途中からは、`owners-lockfiles` と `owners-others` も同時に無効にしています。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
 人が 2 人以上いる組織では、この操作は要りません。
@@ -250,7 +251,7 @@ cooldown を設定に書かない場合も、Dependabot の本体は 3 日の co
 コンテナイメージと GitHub Actions の更新は、バージョンを書いたファイルが変わるので、cooldown が効くかどうかに関係なく、所有者のレビューを通ります。
 
 コンテナイメージは Docker Hub のものを使う決まりにしました。
-uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、cooldown を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、CI（`automation/versions.py check`）が落ちます。
+uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、cooldown を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、CI（`.github/scripts/versions.py check`）が落ちます。
 Docker Hub に無いイメージを使うときは、cooldown が効かないと承知したうえで、人のレビューで守ります。
 Docker Hub には、認証なしで取得できる回数に制限があります。CI が取得で失敗するようになったら、認証を足します。
 

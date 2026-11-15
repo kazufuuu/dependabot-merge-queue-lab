@@ -198,7 +198,7 @@ def set_version(root: Path, name: str, version: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("show", "check", "sync", "align"))
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
     try:
         if args.command == "show":

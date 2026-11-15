@@ -5,6 +5,20 @@
 
 実物で確かめた動きだけを、確かなこととして書いています。確かめていない手順には、そう書いてあります。
 
+## ディレクトリの見取り図
+
+`.github` の下が仕組みで、ほかは見本のコードです。
+
+| 場所 | 中身 | ほかのリポジトリへ持っていくか |
+|---|---|---|
+| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
+| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
+| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト | 持っていく |
+| `versions/Dockerfile` | Dependabot 用の Dockerfile | 持っていく |
+| `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
+| `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
+| `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード | 持っていかない |
+
 ## 仕組みのあらまし
 
 Dependabot（GitHub の機能）が、使っているライブラリや道具の新しいバージョンを見つけ、更新の PR を出します。
@@ -236,15 +250,15 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 | `.github/dependabot.yml` | 何を、いつ、どうまとめて更新するか |
 | `.github/CODEOWNERS` | すべてのファイルの所有者。レビューの依頼先になる |
 | `.github/workflows/ci.yml` | CI。テストと、本番のイメージのビルド |
-| `.github/workflows/dependabot-merge.yml` と `automation/dependabot_merge.py` | PR の振り分けと、自動マージ |
-| `automation/dependabot_limit.py` | 開いている PR が上限に近づいたら、Issue で知らせる |
-| `.github/workflows/version-sync.yml` と `automation/version_sync.py` | Dependabot 用の Dockerfile のバージョンを、`.python-version` などへ写す |
-| `.github/workflows/security-release.yml` と `automation/security_release.py` | Python と Node のセキュリティアップデートを見つけ、待たずに PR を出す。Python と Node は別の PR |
-| `automation/versions.py` | `.python-version` などのバージョンと、Dependabot 用の Dockerfile を読み、揃っていることを確かめる |
+| `.github/workflows/dependabot-merge.yml` と `.github/scripts/dependabot_merge.py` | PR の振り分けと、自動マージ |
+| `.github/scripts/dependabot_limit.py` | 開いている PR が上限に近づいたら、Issue で知らせる |
+| `.github/workflows/version-sync.yml` と `.github/scripts/version_sync.py` | Dependabot 用の Dockerfile のバージョンを、`.python-version` などへ写す |
+| `.github/workflows/security-release.yml` と `.github/scripts/security_release.py` | Python と Node のセキュリティアップデートを見つけ、待たずに PR を出す。Python と Node は別の PR |
+| `.github/scripts/versions.py` | `.python-version` などのバージョンと、Dependabot 用の Dockerfile を読み、揃っていることを確かめる |
 | `justfile` | 人が手で打つ作業の入口。CI も同じレシピを呼ぶ |
 | `.github/workflows/dependabot-stats.yml` | Dependabot の PR の本数を、週に 1 回数える |
 | `.github/workflows/actions.lock` | workflow が使う action を、コミットで固定する |
-| `settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト |
+| `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト |
 | GitHub App | 承認、マージキューへの投入、バージョンを写すコミット、セキュリティアップデートの PR を行う主体 |
 | ruleset（`main`、`owners-lockfiles`、`owners-others`、`tags`） | main とタグの保護。App が所有者のレビューなしで通せるのは、ロックファイルだけ |
 
@@ -253,16 +267,16 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 | 変えたいこと | 変え方 |
 |---|---|
 | 開発用の依存の minor を自動にする | リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にする |
-| レビュワーの人数 | `automation/policy.json` の `review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
+| レビュワーの人数 | `.github/scripts/policy.json` の `review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | 所有者 | team のメンバーを変える |
-| マージに要る承認の数 | `settings/ruleset.json` の `required_approving_review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
+| マージに要る承認の数 | `.github/settings/ruleset.json` の `required_approving_review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | cooldown | `.github/dependabot.yml` の `cooldown` の `default-days` |
 | 同時に開く PR の上限 | `.github/dependabot.yml` の `open-pull-requests-limit` |
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
-| 更新の対象 | `.github/dependabot.yml` に設定を足す。Python や Node のようなランタイムを足すときは、Dependabot 用の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
-| ロックファイルの種類 | `automation/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
+| 更新の対象 | `.github/dependabot.yml` に設定を足す。Python や Node のようなランタイムを足すときは、Dependabot 用の `versions/Dockerfile` に `FROM` を足し、`.github/scripts/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
+| ロックファイルの種類 | `.github/scripts/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
 
-`uv run just apply-settings` は、`settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
+`uv run just apply-settings` は、`.github/settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
 
 ### 調べ方
 

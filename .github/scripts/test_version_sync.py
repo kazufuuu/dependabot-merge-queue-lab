@@ -46,7 +46,7 @@ class PayloadTest(unittest.TestCase):
         version_sync.validate_paths(sorted(version_sync.ALLOWED))
 
     def test_other_files_are_refused(self):
-        for path in (".github/workflows/ci.yml", "pyproject.toml", "uv.lock", versions.SENTINEL, "automation/versions.py"):
+        for path in (".github/workflows/ci.yml", "pyproject.toml", "uv.lock", versions.SENTINEL, ".github/scripts/versions.py"):
             with self.assertRaises(version_sync.SyncError):
                 version_sync.validate_paths([".python-version", path])
 

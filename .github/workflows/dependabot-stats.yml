@@ -23,4 +23,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DAYS: ${{ inputs.days || '7' }}
-        run: python3 automation/dependabot_stats.py --days "$DAYS" | tee -a "$GITHUB_STEP_SUMMARY"
+        run: python3 .github/scripts/dependabot_stats.py --days "$DAYS" | tee -a "$GITHUB_STEP_SUMMARY"

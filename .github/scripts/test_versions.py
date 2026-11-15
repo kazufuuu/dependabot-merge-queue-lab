@@ -5,7 +5,7 @@ from pathlib import Path
 
 import versions
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 FILES = (versions.SENTINEL, *set(versions.SOURCES.values()), "api/Dockerfile")
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """所有者のレビューを求める ruleset を 2 つ作って、JSON で出す。
 
-使い方: settings/owner_rulesets.py <owner>/<repo> <出力先のディレクトリ>
+使い方: .github/settings/owner_rulesets.py <owner>/<repo> <出力先のディレクトリ>
 
 すべてのファイルに、team のレビューを求める。求め方を、ファイルで 2 つに分ける。
 
@@ -9,7 +9,7 @@
 - owners-others: ロックファイル以外を変える PR に求める。対象から外す主体はいない
 
 App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られる。
-ロックファイルの名前、team、App は、automation/policy.json から読む。
+ロックファイルの名前、team、App は、.github/scripts/policy.json から読む。
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-POLICY = Path(__file__).resolve().parent.parent / "automation" / "policy.json"
+POLICY = Path(__file__).resolve().parent.parent / "scripts" / "policy.json"
 
 
 def gh_id(path: str) -> int | None:

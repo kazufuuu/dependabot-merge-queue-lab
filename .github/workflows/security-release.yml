@@ -30,7 +30,7 @@ jobs:
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 automation/security_release.py find
+        run: python3 .github/scripts/security_release.py find
 
   # 鍵を持つ。渡されたバージョンで main のファイルを書き換え、ブランチと PR を作る。
   open:
@@ -49,4 +49,4 @@ jobs:
           PAYLOAD: ${{ needs.find.outputs.payload }}
           AUTOMERGE_APP_ID: ${{ vars.AUTOMERGE_APP_ID }}
           AUTOMERGE_APP_PRIVATE_KEY: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
-        run: python3 automation/security_release.py open
+        run: python3 .github/scripts/security_release.py open
