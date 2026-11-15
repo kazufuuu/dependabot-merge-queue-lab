@@ -64,7 +64,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6.0.3
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .tool-versions
           cache: npm
@@ -111,7 +111,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.3
-      - uses: actions/cache@v6.0.0
+      - uses: actions/cache@v6.1.0
         with:
           path: /tmp/buildcache
           key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', 'pyproject.toml') }}
