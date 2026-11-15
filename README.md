@@ -16,7 +16,6 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | Python のランタイム | `.python-version` |
 | Node のランタイム | `.node-version` |
 | Terraform 本体 | `infra/versions.tf` の `required_version` |
-| uv | 直下の `pyproject.toml` → `uv.lock` |
 | Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json` → `web/package-lock.json` |
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers` → `infra/.terraform.lock.hcl` |
@@ -32,7 +31,6 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
 | Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）と、Dependabot 用の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
-| uv | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
 | Python と Node の、セキュリティアップデート | 管理場所と、Dependabot 用の `versions/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定したバージョン（Actions の `uses:`、`==` で書いた依存） | バージョンを書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティアップデート | 更新による | cooldown なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、CI が通れば自動でマージする |

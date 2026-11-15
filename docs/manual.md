@@ -39,7 +39,6 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Python のランタイム | `.python-version`（例: `3.13.16`） | `.python-version`。patch まで書く |
 | Node のランタイム | `.node-version`（例: `24.20.0`） | `.node-version`。patch まで書く |
 | Terraform 本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | `infra/versions.tf`。patch まで書く |
-| uv | 直下の `pyproject.toml` の開発用の依存（範囲。例: `uv>=0.13,<0.14`） | `uv.lock` |
 | Python のライブラリ | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の依存（範囲） | `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json`（範囲） | `web/package-lock.json` |
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers`（範囲） | `infra/.terraform.lock.hcl` |
@@ -60,8 +59,6 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Python と Node のランタイム、Terraform 本体 | `.python-version`、`.node-version`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
 | GitHub Actions | `.github/workflows/*.yml` と `.github/workflows/actions.lock` | 週に 1 本にまとまって出る | レビューする |
 | セキュリティアップデート | 通常の更新と同じファイル | cooldown なしで出る。自動で入るか、人が判断するかの分け方は、通常の更新と同じ | ライブラリの patch でテストが通れば、何もしない。ほかはレビューする |
-
-uv も、ライブラリと同じ扱いです。patch は自動で入り、minor と major は人が判断します。
 
 届く量の目安は、次のとおりです。
 
@@ -108,7 +105,7 @@ Python の patch の PR は、uv のバージョンに関係なく CI が動き�
 | 変えたいもの | 書き換えるファイル | そのあと動かすレシピ | コミットするファイル |
 |---|---|---|---|
 | Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.node-version`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`versions/Dockerfile` |
-| Python のライブラリ（uv を含む）のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
+| Python のライブラリのバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
 | npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
 | workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
 
