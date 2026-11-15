@@ -41,7 +41,6 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Node の本体 | `.tool-versions` の `nodejs` の行（例: `nodejs 24.20.0`） | `.tool-versions`。patch まで書く |
 | Terraform の本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | `infra/versions.tf`。patch まで書く |
 | uv | 直下の `pyproject.toml` の開発用の依存（範囲。例: `uv>=0.13,<0.14`） | `uv.lock` |
-| just（タスクランナー） | 直下の `pyproject.toml` の開発用の依存（範囲。例: `rust-just>=1.59,<2`） | `uv.lock` |
 | Python のライブラリ | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の依存（範囲） | `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json`（範囲） | `web/package-lock.json` |
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers`（範囲） | `infra/.terraform.lock.hcl` |
@@ -104,14 +103,14 @@ Python の patch の PR は、uv のバージョンに関係なく検査が動�
 
 ### バージョンを変える手順
 
-ふだんの更新では、ファイルを手で編集しません。自分でバージョンを変えるときは、ファイルを書き換えたあとに、`just` のレシピを 1 つ動かします。
+ふだんの更新では、ファイルを手で編集しません。自分でバージョンを変えるときは、ファイルを書き換えたあとに、`uv run just` でレシピを 1 つ動かします。
 
 | 変えたいもの | 書き換えるファイル | そのあと動かすレシピ | コミットするファイル |
 |---|---|---|---|
-| Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか | `just align` | 書き換えたファイルと、`versions/Dockerfile` |
-| Python のライブラリ、uv、just のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
-| npm のライブラリのバージョンの範囲 | `web/package.json` | `just lock-web` | `web/package.json` と `web/package-lock.json` |
-| workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
+| Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`versions/Dockerfile` |
+| Python のライブラリ、uv、just のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
+| npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
+| workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
 
 Python の minor や major、Node の major を上げる手順は、「Python と Node の大きい更新」の節にあります。
 
@@ -119,12 +118,12 @@ Python の minor や major、Node の major を上げる手順は、「Python �
 
 | 忘れたこと | 起きること | 直し方 |
 |---|---|---|
-| `.python-version`、`.tool-versions`、`infra/versions.tf` を書き換えたあと、`just align` を動かさなかった | 検査の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `just align` を動かし、`versions/Dockerfile` をコミットする |
-| `pyproject.toml` の範囲を書き換えたあと、`just lock-python` を動かさなかった | 検査の `workspace` か `api` が落ちる。「The lockfile at `uv.lock` needs to be updated」と出る（手元で確かめた） | `just lock-python` を動かし、`uv.lock` と `api/uv.lock` をコミットする |
-| `web/package.json` の範囲を書き換えたあと、`just lock-web` を動かさなかった | 検査の `web` が、`npm ci` で落ちる（npm の決まった動き。このリポジトリでは試していない） | `just lock-web` を動かし、`web/package-lock.json` をコミットする |
-| workflow の `uses:` を書き換えたあと、`just lock-actions` を動かさなかった | workflow が起動しない。検査の結果が付かないので、マージできない。Actions の画面に「This run likely failed because of a workflow file issue.」と出る（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめた） | `just lock-actions` を動かし、`.github/workflows/actions.lock` をコミットする |
+| `.python-version`、`.tool-versions`、`infra/versions.tf` を書き換えたあと、`uv run just align` を動かさなかった | 検査の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `uv run just align` を動かし、`versions/Dockerfile` をコミットする |
+| `pyproject.toml` の範囲を書き換えたあと、`uv run just lock-python` を動かさなかった | 検査の `workspace` か `api` が落ちる。「The lockfile at `uv.lock` needs to be updated」と出る（手元で確かめた） | `uv run just lock-python` を動かし、`uv.lock` と `api/uv.lock` をコミットする |
+| `web/package.json` の範囲を書き換えたあと、`uv run just lock-web` を動かさなかった | 検査の `web` が、`npm ci` で落ちる（npm の決まった動き。このリポジトリでは試していない） | `uv run just lock-web` を動かし、`web/package-lock.json` をコミットする |
+| workflow の `uses:` を書き換えたあと、`uv run just lock-actions` を動かさなかった | workflow が起動しない。検査の結果が付かないので、マージできない。Actions の画面に「This run likely failed because of a workflow file issue.」と出る（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめた） | `uv run just lock-actions` を動かし、`.github/workflows/actions.lock` をコミットする |
 
-`just` と、レシピが使う道具の入れ方は、「手元の始め方」の節にあります。
+レシピが使う道具の入れ方は、「手元の始め方」の節にあります。
 
 ### Python と Node の大きい更新
 
@@ -137,10 +136,10 @@ Python の minor や major を上げるときに書き換える場所は、次�
 | 1 | `.python-version` | 新しいバージョン（例: `3.14.9`） |
 | 2 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の `requires-python` | 新しい系列の範囲（例: `>=3.14,<3.15`）。4 か所 |
 | 3 | `pyproject.toml` の `[tool.ruff] target-version` | 例: `py314` |
-| 4 | `versions/Dockerfile` | 手では書き換えない。`just align` を動かす |
-| 5 | `uv.lock`、`api/uv.lock` | 手では書き換えない。`just lock-python` を動かす。ロックファイルが解き直される |
+| 4 | `versions/Dockerfile` | 手では書き換えない。`uv run just align` を動かす |
+| 5 | `uv.lock`、`api/uv.lock` | 手では書き換えない。`uv run just lock-python` を動かす。ロックファイルが解き直される |
 
-書き換えたあと、`just workspace` と `just api` で、lint とテストを動かします。新しい Python に対応していない依存があると、`just lock-python` かテストで分かります。
+書き換えたあと、`uv run just workspace` と `uv run just api` で、lint とテストを動かします。新しい Python に対応していない依存があると、`uv run just lock-python` かテストで分かります。
 Python の手順は、3.13.16 から 3.14.9 へ上げて、手元で通しました。lint とテストは通りました。本番のイメージのビルドと、PR にして検査を通すところは、試していません。
 Dependabot の設定（`.github/dependabot.yml` の `ignore`）は、変えなくて構いません。Python を上げたあとは、新しい系列の patch の PR が出ます。
 
@@ -150,44 +149,45 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 |---|---|---|
 | 1 | `.tool-versions` の `nodejs` の行 | 新しいバージョン |
 | 2 | `web/package.json` の `engines.node` | 新しい系列の範囲（例: `>=25 <26`）。`web/.npmrc` の `engine-strict` があるので、範囲が違うと `npm ci` が止まる |
-| 3 | `versions/Dockerfile` | 手では書き換えない。`just align` を動かす |
-| 4 | `web/package-lock.json` | 手では書き換えない。`just lock-web` を動かす |
+| 3 | `versions/Dockerfile` | 手では書き換えない。`uv run just align` を動かす |
+| 4 | `web/package-lock.json` | 手では書き換えない。`uv run just lock-web` を動かす |
 
 ### 手元の始め方
 
-作業の入口は、直下の `justfile` です。`just --list` で、レシピの一覧と説明が出ます。CI も、同じレシピを呼びます。
+最初に、リポジトリの直下で `uv sync` を動かします。開発用の依存（pytest、ruff、just）が入ります。
+作業は、`uv run just <レシピ>` で動かします。レシピは直下の `justfile` にあり、`uv run just --list` で、一覧と説明が出ます。CI も、同じレシピを呼びます。
 
 | レシピ | 行うこと |
 |---|---|
-| `just test` | 手元の検査を全部動かす（本番のイメージのビルドは除く） |
-| `just workspace`、`just api`、`just web`、`just infra`、`just automation` | 検査を 1 つずつ動かす。名前は、CI の job と同じ |
-| `just image -t api` | 本番の API のイメージをビルドする |
-| `just versions` | 使っているバージョンを出す |
-| `just align`、`just lock-python`、`just lock-web`、`just lock-actions` | バージョンを書き換えたあとに動かす（「バージョンを変える手順」の節） |
+| `uv run just test` | 手元の検査を全部動かす（本番のイメージのビルドは除く） |
+| `uv run just workspace`、`uv run just api`、`uv run just web`、`uv run just infra`、`uv run just automation` | 検査を 1 つずつ動かす。名前は、CI の job と同じ |
+| `uv run just image -t api` | 本番の API のイメージをビルドする |
+| `uv run just versions` | 使っているバージョンを出す |
+| `uv run just align`、`uv run just lock-python`、`uv run just lock-web`、`uv run just lock-actions` | バージョンを書き換えたあとに動かす（「バージョンを変える手順」の節） |
 
 CI で検査が落ちたときは、落ちた job と同じ名前のレシピを手元で動かすと、同じコマンドが動きます。
 
-使う道具と、バージョンのあるファイルは、次のとおりです。入れ方は自由です。
+`uv sync` で入らない道具と、バージョンのあるファイルは、次のとおりです。入れ方は自由です。
 
 | 道具 | バージョンのあるファイル | 入れ方の例 |
 |---|---|---|
 | uv | 決まったバージョンは無い。0.13 以上 | 公式のインストーラ、Homebrew、mise |
 | Python | `.python-version` | 入れなくてよい。uv が取得する |
-| just | CI が使うバージョンは `uv.lock` の `rust-just`。手元のバージョンは自由 | `uv sync` のあとは `uv run just <レシピ>` で動く。Homebrew、mise、cargo でも入る |
 | Node | `.tool-versions` | mise、asdf。nodejs.org から入れてもよい |
 | Terraform | `infra/versions.tf` の `required_version` | mise、asdf、公式の配布物 |
-| Docker | 決まったバージョンは無い | `just image` を動かすときだけ要る |
-| `gh` と、拡張の `gh actions-lock` | 拡張は v0.4.1 | `gh extension install github/gh-actions-lock --pin v0.4.1`。`just lock-actions` を動かすときだけ要る |
+| Docker | 決まったバージョンは無い | `uv run just image` を動かすときだけ要る |
+| `gh` と、拡張の `gh actions-lock` | 拡張は v0.4.1 | `gh extension install github/gh-actions-lock --pin v0.4.1`。`uv run just lock-actions` を動かすときだけ要る |
 
 手元の uv が 0.13 より古いと、uv が止まって知らせます。
 新しい Python が入らないとき（「No interpreter found for Python ...」）は、`uv self update` で uv を更新します。古い uv は、新しい Python をまだ知らないためです。
-手元の Python と Node のバージョンが、`.python-version` や `.tool-versions` と違うと、テストが落ちて知らせます。uv と just のバージョンは照合しません。
+手元の Python と Node のバージョンが、`.python-version` や `.tool-versions` と違うと、テストが落ちて知らせます。uv のバージョンは照合しません。
+just は、ruff や pytest と同じ開発用の依存です。`uv run` で動かすと、`uv.lock` のバージョンになり、CI と揃います。自分で入れた just で `just <レシピ>` と打っても動きます。
 
 確かめたことと、確かめていないことは、次のとおりです。
 
-- 手元で動かしたレシピは、`just workspace`、`just api`、`just automation`、`just versions`、`just align`、`just lock-python`、`just lock-actions` です
-- `just web`、`just infra`、`just image` は、CI で動くことを確かめました。手元では動かしていません
-- `just lock-web` と `just apply-settings` は、動かしていません
+- just を別に入れていない状態で、`uv sync` のあとに動かしたレシピは、`uv run just workspace`、`uv run just api`、`uv run just automation`、`uv run just versions`、`uv run just align`、`uv run just lock-python`、`uv run just lock-actions` です
+- `uv run just web`、`uv run just infra`、`uv run just image` は、CI で動くことを確かめました。手元では動かしていません
+- `uv run just lock-web`、`uv run just sync`、`uv run just apply-settings` は、動かしていません
 - mise が `.tool-versions` と `.python-version` からバージョンを読むところは確かめました。それぞれの道具で実際に入れるところは、試していません
 - Python のバージョンがずれたときにテストが落ちることは、確かめました。Node のバージョンがずれたときは、確かめていません
 
@@ -236,16 +236,16 @@ CI で検査が落ちたときは、落ちた job と同じ名前のレシピを
 | 変えたいこと | 変え方 |
 |---|---|
 | 開発用の依存の minor を自動にする | リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にする |
-| レビュワーの人数 | `automation/policy.json` の `review_count` を変え、`just apply-settings <owner>/<repo>` を動かす |
+| レビュワーの人数 | `automation/policy.json` の `review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | 所有者 | team のメンバーを変える |
-| マージに要る承認の数 | `settings/ruleset.json` の `required_approving_review_count` を変え、`just apply-settings <owner>/<repo>` を動かす |
+| マージに要る承認の数 | `settings/ruleset.json` の `required_approving_review_count` を変え、`uv run just apply-settings <owner>/<repo>` を動かす |
 | cooldown | `.github/dependabot.yml` の `cooldown` の `default-days` |
 | 同時に開く PR の上限 | `.github/dependabot.yml` の `open-pull-requests-limit` |
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
 | 更新の対象 | `.github/dependabot.yml` に設定を足す。道具の本体は、見張り役の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
-| ロックファイルの種類 | `automation/policy.json` の `lockfiles` に足し、`just apply-settings <owner>/<repo>` を動かす |
+| ロックファイルの種類 | `automation/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
 
-`just apply-settings` は、`settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
+`uv run just apply-settings` は、`settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
 
 ### 調べ方
 
@@ -290,7 +290,7 @@ workflow の無効化と再開は、実際に行いました。
 | PR の本数の見直し | 週に 1 回 | `dependabot-stats` の実行結果を見る。人が承認するだけの PR が多ければ、自動の範囲を広げることを考える |
 | 判断待ちの PR の片づけ | Issue が立ったとき | 「Dependabot の PR が上限に近づいています」の Issue に、設定ごとの本数が出る |
 | App の鍵の作り直し | 組織の決まりに従う | [github-app.md](github-app.md) の「鍵の作り直し」。試していない |
-| `gh actions-lock` のバージョンの見直し | 拡張の新しいバージョンが出たとき | ロックファイルの書式は変わることがある。新しいバージョンで `just lock-actions` を動かし、検査が通ることを確かめてから上げる |
+| `gh actions-lock` のバージョンの見直し | 拡張の新しいバージョンが出たとき | ロックファイルの書式は変わることがある。新しいバージョンで `uv run just lock-actions` を動かし、検査が通ることを確かめてから上げる |
 
 ## 情報システム部門の担当者への案内
 

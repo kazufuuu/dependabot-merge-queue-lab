@@ -1,6 +1,6 @@
 # バージョンを管理する場所ではない。バージョンを確かめるとき、変えるときは、ここではなく正本を見る。
 # 正本は、.python-version（Python）、.tool-versions（Node）、infra/versions.tf（Terraform）。
-# 正本を書き換えたあと、python3 automation/versions.py align を動かすと、このファイルが揃う。
+# 正本を書き換えたあと、uv run just align を動かすと、このファイルが揃う。
 #
 # Dependabot に新しいバージョンを見つけさせるためのファイル。このイメージはビルドしない。
 # Dependabot は、.python-version などの正本を書き換えられない。

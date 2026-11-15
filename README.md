@@ -16,7 +16,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | Python の本体 | `.python-version` |
 | Node の本体 | `.tool-versions` |
 | Terraform の本体 | `infra/versions.tf` の `required_version` |
-| uv、just（タスクランナー） | 直下の `pyproject.toml` → `uv.lock` |
+| uv | 直下の `pyproject.toml` → `uv.lock` |
 | Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json` → `web/package-lock.json` |
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers` → `infra/.terraform.lock.hcl` |
@@ -217,8 +217,10 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 依存はキャッシュします（uv は setup-uv、npm は setup-node）。
 
 各 job は、`justfile` のレシピを 1 つ呼びます。job とレシピの名前は同じです。手元でも同じレシピを使うので、手元と CI で、動かすコマンドが食い違いません。
-落ちたときは、落ちた job と同じ名前のレシピ（`just web` など）を手元で動かすと、再現できます。レシピは、動かすコマンドを 1 行ずつログに出すので、どのコマンドで落ちたかも分かります。
-just は、各 job が pipx で入れます。バージョンは、`automation/versions.py show` が `uv.lock` から読みます。かかる時間は、1 つの job につき 3 秒ほどです（[PR #94](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/94) で測りました）。
+落ちたときは、落ちた job と同じ名前のレシピ（`uv run just web` など）を手元で動かすと、再現できます。レシピは、動かすコマンドを 1 行ずつログに出すので、どのコマンドで落ちたかも分かります。
+`workspace` と `api` は、手元と同じ `uv run just` で呼びます。Python と uv を、もともと入れる job なので、費用は増えません。
+`web`、`infra`、`automation`、`image` は、Python の環境を使いません。この 4 つは、pipx で just を入れて呼びます。バージョンは `uv.lock` と同じで、`automation/versions.py show` が読みます。かかる時間は、1 つの job につき 3 秒ほどです。
+この 4 つも `uv run just` にすると、Python と uv を入れるぶん、1 つの job につき 8〜10 秒かかりました（[PR #95](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/95) で測りました）。そのため、pipx のままにしています。
 
 | job | 内容 | バージョンの読み方 |
 |---|---|---|
@@ -309,7 +311,7 @@ workflow が使う action は、GitHub の workflow のロックファイル（`
 workflow の `uses:` にはタグ（`actions/checkout@v6.0.3`）を書きます。実際に動くのは、ロックファイルに記録したコミットです。
 ロックファイルは `gh actions-lock`（GitHub 公式の `gh` の拡張）が作ります。手では編集しません。
 
-`uses:` を足したり変えたりしたときは、`just lock-actions` を動かして、ロックファイルも一緒にコミットします。
+`uses:` を足したり変えたりしたときは、`uv run just lock-actions` を動かして、ロックファイルも一緒にコミットします。
 ロックファイルと食い違う `uses:` を書いた workflow は、起動しません。検査の結果が付かないので、その PR はマージできません（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89)、[実行 43686598573](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43686598573)。「This run likely failed because of a workflow file issue.」）。
 Dependabot が action を上げる PR では、ロックファイルの書き換えも Dependabot が行います。人の手作業は要りません（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。
 
@@ -413,15 +415,15 @@ PR が出ると、バージョンを正本に写すコミットが機械で足�
 
 確かめたのは、mise が `.tool-versions` と `.python-version` からバージョンを読むところ（`mise ls --current`）までです。それぞれの道具で実際に入れるところは、試していません。
 
-作業の入口は、直下の `justfile` です。`just --list` で、レシピの一覧と説明が出ます。
+最初に `uv sync` を動かします。作業は、`uv run just <レシピ>` で動かします。レシピは直下の `justfile` にあり、`uv run just --list` で、一覧と説明が出ます。
 
 ```sh
-just test          # 手元の検査を全部（本番のイメージのビルドは除く）
-just workspace     # 検査を 1 つずつ。ほかに api、web、infra、automation
-just image -t api  # 本番のイメージ
+uv run just test          # 手元の検査を全部（本番のイメージのビルドは除く）
+uv run just workspace     # 検査を 1 つずつ。ほかに api、web、infra、automation
+uv run just image -t api  # 本番のイメージ
 ```
 
-just は、PyPI の `rust-just` として、直下の `pyproject.toml` の開発用の依存に書いてあります。`uv sync` のあとは、`uv run just <レシピ>` で動きます。自分で入れた just を使っても構いません。
+just は、ruff や pytest と同じ開発用の依存です（PyPI の `rust-just`）。`uv sync` で入り、`uv run just <レシピ>` で動きます。
 
 ### 人がバージョンを変えるとき
 
@@ -429,14 +431,14 @@ just は、PyPI の `rust-just` として、直下の `pyproject.toml` の開発
 minor や major を上げるなど、人が意図してバージョンを変えるときは、次の 2 つを行います。
 
 1. 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
-2. `just align` を動かす。見張り役の `versions/Dockerfile` が、正本に揃う
+2. `uv run just align` を動かす。見張り役の `versions/Dockerfile` が、正本に揃う
 
-`just align` を動かし忘れた PR は、検査の `automation` が落とします。
+`uv run just align` を動かし忘れた PR は、検査の `automation` が落とします。
 ライブラリの範囲や、workflow の action を変えるときのレシピは、[マニュアル](docs/manual.md)の「バージョンを変える手順」にあります。
 
 ## 設定の反映
 
-`just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `settings/apply.sh` です。
+`uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `settings/apply.sh` です。
 ruleset は 4 つです。
 
 - `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須の検査、マージキュー

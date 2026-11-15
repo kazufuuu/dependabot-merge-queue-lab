@@ -17,7 +17,7 @@
 | 10 | 満たす | なし |
 | 11 | 満たす | Python と Node は、バージョンを書いたファイル（`.python-version`、`.tool-versions`）を、手元の道具、CI、本番のイメージのビルドが読む。手元のバージョンが違うとテストが落ちる。uv は、CI と本番のイメージが `uv.lock` の同じバージョンを使う。手元の uv は下限（0.13）だけ。道具で実際に入れるところは試していない。Node のテストが落ちる側は確かめていない |
 | 12 | 満たす | なし |
-| 13 | 満たす | 依存ごとの PR にしたあとの検査の回数は、PR 1 本につき 1 回（README の「PR の本数と検査の回数」）。同じロックファイルの patch が 3 本以上重なった場合は、測れていない。CI の job は、手元と同じ `justfile` のレシピを呼ぶ。job とレシピの名前は同じ。just を入れる時間は、1 つの job につき 3 秒ほど（[PR #94](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/94)） |
+| 13 | 満たす | 依存ごとの PR にしたあとの検査の回数は、PR 1 本につき 1 回（README の「PR の本数と検査の回数」）。同じロックファイルの patch が 3 本以上重なった場合は、測れていない。CI の job は、手元と同じ `justfile` のレシピを呼ぶ。job とレシピの名前は同じ。Python を使う job は `uv run just` で呼ぶ。ほかの job は、pipx で同じバージョンの just を入れる。かかる時間は、1 つの job につき 3 秒ほど（[PR #94](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/94)）。`uv run just` に揃えると 8〜10 秒かかったので、揃えていない（[PR #95](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/95)） |
 | 14 | 満たす | App の鍵の入れ替え、App の停止と削除は、試していない |
 | 15 | 一部 | 無視するための設定は README に示した。GitHub の文書で確かめたもので、実物では試していない。通知の数は、設定からの上限で示した。実測は 2 本ぶん |
 | 16 | 満たす | patch、minor、major の 5 件が、1 本の PR にまとまって出た（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。週 1 本になることは、確認の間隔（週 1 回）からの見込みで、複数の週では見ていない |

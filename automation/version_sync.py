@@ -160,7 +160,7 @@ def report_failure(repo: str, number: str, error: Exception) -> None:
     body = (
         "バージョンの同期に失敗しました。この PR は、見張り役（`versions/Dockerfile`）と正本が食い違ったままです。\n\n"
         f"- 理由: {error}\n"
-        "- 直し方: この PR のブランチで `python3 automation/versions.py sync` を動かし、結果をコミットしてください。"
+        "- 直し方: この PR のブランチで `uv run just sync` を動かし、結果をコミットしてください。"
         "スクリプトがバージョンの記述を見つけられない場合は、理由に出ているファイルを確かめてください"
     )
     try:

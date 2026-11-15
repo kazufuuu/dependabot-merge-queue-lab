@@ -1,6 +1,6 @@
-# 人が手で打つ作業の入口。レシピの一覧は `just --list` で出る。
+# 人が手で打つ作業の入口。uv sync のあと、uv run just <レシピ> で動かす。レシピの一覧は uv run just --list で出る。
 # CI も同じレシピを呼ぶ（.github/workflows/ci.yml）。手元と CI で、動かすコマンドを揃えるため。
-# just のバージョンは、直下の pyproject.toml の開発用の依存（rust-just）に範囲で書き、uv.lock が決める。
+# just は、ruff や pytest と同じ開発用の依存（rust-just）。バージョンは uv.lock が決める。
 
 # レシピの一覧を出す
 default:
@@ -53,6 +53,10 @@ versions:
 align:
     python3 automation/versions.py align
     python3 automation/versions.py check
+
+# Dependabot の PR で、バージョンの同期が失敗したときに動かす。versions/Dockerfile のバージョンを、正本へ写す
+sync:
+    python3 automation/versions.py sync
 
 # pyproject.toml の範囲を書き換えたあとに動かす。uv.lock と api/uv.lock を作り直す
 lock-python:

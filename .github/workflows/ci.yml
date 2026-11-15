@@ -14,6 +14,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # テストは runner の上で直接動かす。動かすコマンドは justfile のレシピで、手元と同じものを呼ぶ。
+# workspace と api は、手元と同じ uv run just で呼ぶ。Python と uv を、もともと入れる job なので、費用は増えない。
+# web、infra、automation、image は、Python の環境を使わない。uv run のために Python と uv を入れると、
+# job あたり 8〜10 秒かかる（測った）。pipx で uv.lock と同じバージョンの just を入れると 3 秒なので、こちらにしている。
 # job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
 # バージョンは正本から読む。
 # - Python: .python-version（setup-python が読んで入れる）
@@ -84,14 +87,9 @@ jobs:
           node-version-file: .tool-versions
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: actions/setup-python@v7.1.0
-        with:
-          python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          version: ${{ steps.versions.outputs.uv }}
-          enable-cache: true
-      - run: uv run --locked just web
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just web
         working-directory: .
 
   infra:
@@ -110,14 +108,9 @@ jobs:
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
-      - uses: actions/setup-python@v7.1.0
-        with:
-          python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          version: ${{ steps.versions.outputs.uv }}
-          enable-cache: true
-      - run: uv run --locked just infra
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just infra
         working-directory: .
 
   automation:
@@ -128,15 +121,10 @@ jobs:
       - name: バージョンを正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v7.1.0
-        with:
-          python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          version: ${{ steps.versions.outputs.uv }}
-          enable-cache: true
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
       - name: 振り分けとバージョンの同期のテスト。バージョンの正本と見張り役が揃っていることも確かめる
-        run: uv run --locked just automation
+        run: just automation
 
   # 本番のイメージがビルドできることを確かめる。起動の確認とテストは、ここでは行わない。
   # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、ビルドが落ちる更新がある。
@@ -153,17 +141,12 @@ jobs:
       - name: バージョンを正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v7.1.0
-        with:
-          python-version-file: .python-version
-      - uses: astral-sh/setup-uv@v10.3.2
-        with:
-          version: ${{ steps.versions.outputs.uv }}
-          enable-cache: true
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
       - name: API のイメージを正本のバージョンでビルドする
         run: |
           docker buildx create --name ci --use >/dev/null
-          uv run --locked just image --builder ci \
+          just image --builder ci \
             --cache-from type=local,src=/tmp/buildcache \
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache

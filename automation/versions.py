@@ -136,7 +136,7 @@ def check(root: Path) -> list[str]:
         if actual[name] != version:
             errors.append(
                 f"{name}: 正本（{SOURCES[name]}）は {actual[name]}、{SENTINEL} は {version}。"
-                "正本を直したのなら versions.py align を、見張り役を直したのなら versions.py sync を動かしてください"
+                "正本を直したのなら uv run just align を、見張り役を直したのなら uv run just sync を動かしてください"
             )
     for path in DOCKERFILES:
         for image in images_outside_docker_hub((root / path).read_text()):
