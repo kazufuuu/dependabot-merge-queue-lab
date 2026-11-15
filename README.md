@@ -237,6 +237,7 @@ uv は、正本のファイルを持ちません。ライブラリと同じ扱�
 - 直下の `pyproject.toml` の開発用の依存に、範囲（`uv>=0.13,<0.14`）で書きます。版は `uv.lock` が決めます
 - CI と本番のイメージは、`uv.lock` の版を使います。`automation/versions.py show` が読んで渡します
 - 手元の uv は、古すぎなければ構いません。下限は `[tool.uv] required-version`（`>=0.13`）で、これより古い uv は止まります
+- uv の更新は、直下の uv の設定から、ほかのライブラリと同じ形で出ます。patch はロックファイルだけが変わり、自動でマージされます（[PR #93](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/93)。0.13.5 から 0.13.7、PR が出てから 2 分 24 秒）
 - uv は、何を入れるかをロックファイルで決める道具です。版が少し違っても、入るものは同じです。そのため、手元まで patch を揃えることはしていません
 
 1 点に固定できない場所が 2 つあります。どちらも試して、Dependabot の uv の更新が失敗することを確かめました。
@@ -267,6 +268,7 @@ Python、Node、Terraform の正本は、Dependabot が書き換えられませ�
 | Terraform | patch、minor、major の全部 | なし |
 
 Node を patch だけに絞らないのは、Node の版の出し方のためです。Node は、セキュリティの修正も含めて、いちばん新しい minor にしか版を出しません。24.20.0 に 24.20.1 は出ません。patch だけに絞ると、何も届かなくなります。
+本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。版を写すコミットが足されているので、`@dependabot rebase` は断られます。
 見張り役の `FROM` の間には、行を挟んでいます。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突するためです。
 
 `version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。

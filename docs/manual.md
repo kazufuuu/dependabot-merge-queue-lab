@@ -223,9 +223,10 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 | 公開されたばかりの版が提案された | Docker Hub 以外のレジストリのイメージでは、待つ期間が効かない | イメージは Docker Hub のものを使う。ほかのレジストリのイメージを `FROM` に書くと、検査が落ちる |
 | Dependabot の uv の更新が失敗する | `requires-python` や `required-version` を 1 点に固定している | 範囲で書く。版の固定は、正本のファイルで行う |
 | action の patch と minor の更新が出ない | `uses:` を major だけのタグ（`@v6`）で書いている | 完全なタグ（`@v6.0.3`）で書く |
-| App が承認したのに「レビューが必要」のまま | App 自身が最後に push した PR は、App の承認では通らない | 人が承認する。Python と Node の本体の PR は、この形になる |
+| App が承認したのに「レビューが必要」のまま | App 自身が最後に push した PR は、App の承認では通らない | 人が承認する。Python、Node、Terraform の本体の PR は、この形になる |
 | 手元で「No interpreter found for Python ...」と出る | 手元の uv が古く、その Python をまだ知らない | `uv self update` で uv を更新する。CI では起きない（Python は setup-python が入れる） |
 | セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。同じパッケージの警告が 2 つのディレクトリにあり、片方にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
+| 本体の PR が main と衝突した。`@dependabot rebase` が断られる | 版を正本に写すコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、版を写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、15 分たっても反応が無かった。理由は分かっていない） |
 | Dependabot が PR を作り直さない | `@dependabot recreate` は、設定が変わった PR には効かない | PR を閉じる。確認を起こすには、`.github/dependabot.yml` の設定を変える。コメントだけの変更では起きない |
 | main に push できない | ruleset が、PR とレビューと検査を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 

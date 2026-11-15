@@ -5,8 +5,8 @@
 
 | 番号 | 状況 | 残っていること |
 |---|---|---|
-| 1 | 満たす | 人の判断待ちの minor の PR が開いた状態で、patch の PR が自動でマージされた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70)、[#79](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/79)、[#85](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/85)、[#87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）。Dependabot の push からマージまで 2〜3 分 |
-| 2 | 一部 | 出す範囲は設定に入れた。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部。uv はライブラリの線に戻した。uv を上げないまま、Python の patch で検査が通った（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。uv の PR が直下の設定から出て、patch が自動で入るところは、main に入れたあとに確かめる。Terraform は minor の PR が出ている（[PR #76](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/76)）。major は、新しい major がまだ無いので見られない |
+| 1 | 満たす | 人の判断待ちの minor の PR が開いた状態で、patch の PR が自動でマージされた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70)、[#79](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/79)、[#85](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/85)、[#87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）。Dependabot の push からマージまで 2〜3 分。`==` で固定していた ruff は、範囲に直すと、同じ patch の PR がロックファイルだけの変更になり、自動でマージされた（[PR #86](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/86)） |
+| 2 | 満たす | 出す範囲は設定に入れた。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部。uv はライブラリの線に戻し、直下の設定から出た patch の PR が自動でマージされた（[PR #93](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/93)、PR が出てから 2 分 24 秒）。uv を上げないまま、Python の patch で検査が通った（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。Terraform は minor の PR が出ている（[PR #76](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/76)）。Terraform の major は、新しい major がまだ無いので、実物では見ていない。止める設定が無いことだけを確かめた |
 | 3 | 満たす | なし |
 | 4 | 満たす | なし |
 | 5 | 満たす | なし |
@@ -21,7 +21,7 @@
 | 14 | 満たす | App の鍵の入れ替え、App の停止と削除は、試していない |
 | 15 | 一部 | 無視するための設定は README に示した。GitHub の文書で確かめたもので、実物では試していない。通知の数は、設定からの上限で示した。実測は 2 本ぶん |
 | 16 | 満たす | patch、minor、major の 5 件が、1 本の PR にまとまって出た（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。週 1 本になることは、確認の間隔（週 1 回）からの見込みで、複数の週では見ていない |
-| 17 | 満たす | 種類でまとめるグループをやめた。版が連動する群（vitest と @vitest/coverage-v8）だけをまとめ、2 件が 1 本で出た（[PR #77](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/77)） |
+| 17 | 満たす | 種類でまとめるグループをやめた。版が連動する群（vitest と @vitest/coverage-v8）だけをまとめ、2 件が 1 本で出た（[PR #77](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/77)）。本体のセキュリティの修正の PR は、Python と Node で分けた。分けた形で PR が出るところは、単体テストだけの裏付け。次のセキュリティの版で確かめる |
 
 ## 満たしていない要件を妨げているもの
 
@@ -29,6 +29,7 @@
 
 古いセキュリティ更新の PR は、壊れていたので閉じました。Dependabot は「閉じれば作り直す」と返しましたが、まだ出し直していません。
 判定は単体テストで確かめています。実物のセキュリティ更新が自動でマージされるところは、見ていません。
+実物では、警告が作られた直後に Dependabot が修正の PR を出した例（PR #9、#10 など）と、出なかった例があります。
 
 開いている警告は、`/api` の pytest の 1 件です。この警告には、作られた時点から、修正の PR を作る実行が 1 回も起きていません。同じ時刻に、直下の pytest と、`/api` の Jinja2 には実行が起きました。エラーは出ていません。
 同じ依存の minor の PR を閉じても、警告の画面の「Create Dependabot security update」を押しても、実行は起きませんでした。原因は分かっていません。
