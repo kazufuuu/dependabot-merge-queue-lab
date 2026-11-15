@@ -4,6 +4,7 @@ from dependabot_merge import (
     LABEL_AUTO,
     LABEL_HUMAN,
     Policy,
+    check_state,
     classify,
     normalize,
     parse_updated_dependencies,
@@ -386,3 +387,49 @@ class PlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def rollup(*contexts):
+    return {"contexts": {"nodes": list(contexts)}}
+
+
+def check_run(status, conclusion, name="all-green"):
+    return {"__typename": "CheckRun", "name": name, "status": status, "conclusion": conclusion}
+
+
+def status_context(name="all-green"):
+    return {"__typename": "StatusContext", "name": name}
+
+
+class CheckStateTest(unittest.TestCase):
+    def test_no_rollup_is_pending(self):
+        self.assertEqual(check_state(None, "all-green"), "pending")
+
+    def test_no_matching_check_run_is_pending(self):
+        # 名前の合う CheckRun が無い。StatusContext は数えない。
+        self.assertEqual(check_state(rollup(status_context(), check_run("COMPLETED", "SUCCESS", "other")), "all-green"), "pending")
+
+    def test_in_progress_is_pending(self):
+        self.assertEqual(check_state(rollup(check_run("IN_PROGRESS", None)), "all-green"), "pending")
+
+    def test_completed_success_is_success(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "SUCCESS")), "all-green"), "success")
+
+    def test_completed_failure_is_failure(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "FAILURE")), "all-green"), "failure")
+
+    def test_neutral_is_not_success(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "NEUTRAL")), "all-green"), "failure")
+
+    def test_several_runs_all_success(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "SUCCESS"), check_run("COMPLETED", "SUCCESS")), "all-green"), "success")
+
+    def test_several_runs_one_failure(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "SUCCESS"), check_run("COMPLETED", "FAILURE")), "all-green"), "failure")
+
+    def test_one_run_still_running_makes_it_pending(self):
+        self.assertEqual(check_state(rollup(check_run("COMPLETED", "SUCCESS"), check_run("IN_PROGRESS", None)), "all-green"), "pending")
+
+    def test_status_context_with_same_name_is_ignored(self):
+        # 同じ名前の StatusContext（人が貼れる commit status）は、判定に使わない。
+        self.assertEqual(check_state(rollup(status_context(), check_run("COMPLETED", "SUCCESS")), "all-green"), "success")
