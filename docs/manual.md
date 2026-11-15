@@ -227,8 +227,8 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 | 手元で「No interpreter found for Python ...」と出る | 手元の uv が古く、その Python をまだ知らない | `uv self update` で uv を更新する。CI では起きない（Python は setup-python が入れる） |
 | セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。同じパッケージの警告が 2 つのディレクトリにあり、片方にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
 | 本体の PR が main と衝突した。`@dependabot rebase` が断られる | 版を正本に写すコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、版を写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、1 時間たっても反応が無かった。理由は分かっていない） |
-| Dependabot が PR を作り直さない | `@dependabot recreate` に反応しないことがある。理由は分かっていない | `.github/dependabot.yml` の設定（時刻など）を変えると、全部の設定の確認が起きる。コメントだけの変更では起きない。ただし、確認が起きても、衝突した PR は「すでにある」と扱われ、作り直されなかった（Python の PR で見た）。その PR は、人が判断する |
-| 見張り役から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を見張り役から外したあとの PR で見た） | 人が PR を閉じる。枝は、閉じたあとに消す |
+| Dependabot が PR を作り直さない | Dependabot は、コメントの依頼に反応しないことがある。確認が起きても、開いている PR を「すでにある」（already exists）と扱い、作り直さないことがある。どちらも、こちらでは直せない（[PR #78](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/78) で見た） | 人が衝突を直して入れるか、閉じて次の版を待つ。確認を起こすには、`.github/dependabot.yml` の設定（時刻など）を変える。1 か所の時刻を変えただけで、全部の設定の確認が起きた。1 つの設定だけを起こすことは、できなかった。コメントだけの変更では起きない |
+| 見張り役から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を見張り役から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。枝は、閉じたあとに消す |
 | main に push できない | ruleset が、PR とレビューと検査を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 
 Dependabot の実行ログは、リポジトリの Insights、Dependency graph、Dependabot から見られます。
