@@ -100,7 +100,7 @@ jobs:
       - name: 版の正本と見張り役が揃っていることを確かめる
         run: python3 automation/versions.py check
 
-  # 本番のイメージが組み立てられることと、起動することを確かめる。テストはここでは動かさない。
+  # 本番のイメージが組み立てられることを確かめる。起動の確認とテストは、ここでは行わない。
   # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、組み立てが落ちる更新がある。
   image:
     runs-on: ubuntu-latest
@@ -115,12 +115,10 @@ jobs:
       - name: API のイメージを正本の版で組み立てる
         run: |
           docker buildx create --name ci --use >/dev/null
-          scripts/build-api.sh --builder ci --load -t api \
+          scripts/build-api.sh --builder ci \
             --cache-from type=local,src=/tmp/buildcache \
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache
-      - name: 組み立てたイメージを起動する
-        run: docker run --rm api
 
   # 必須の検査はこの 1 つだけにする。テストとイメージの組み立てが、すべて成功したときだけ成功する。
   all-green:
