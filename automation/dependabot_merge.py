@@ -8,10 +8,12 @@
 - そのコミットの作者が Dependabot で、GitHub 自身の鍵で署名されている
 - その head を push したのが Dependabot である（人が push し直したコミットは、中身が本物でも対象外）
 - 変わったファイルがロックファイルだけ
-- 更新がすべて、自動マージの対象のグループに属している
-  （セキュリティ更新はグループに属さないので、対象にならない）
 - 更新の種別がすべて patch（設定で、開発用の依存の minor も足せる）
 - 必須の検査が、その head で成功している
+
+セキュリティ更新も、同じ条件で扱う。通常の更新との違いは、待つ期間が無いことだけ。
+セキュリティ更新はグループに属さず、メタデータに種別も書かれない。
+種別は、同じコミットメッセージに Dependabot が書く「from 旧 to 新」の版から求める。
 
 設定で足せる範囲が 2 つある。どちらも既定では無効。
 - 開発用の依存の minor（AUTOMERGE_DEV_MINOR）
@@ -27,6 +29,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -134,11 +137,51 @@ def parse_updated_dependencies(message: str) -> list[dict[str, str]]:
     return items
 
 
-def in_auto_scope(dep: dict[str, str], policy: Policy) -> bool:
-    """グループに属する更新が、自動マージの範囲に入るかを返す。"""
+PLAIN_VERSION = re.compile(r"\d+\.\d+\.\d+")
+
+
+def version_change(message: str, name: str) -> tuple[str, str] | None:
+    """コミットメッセージの本文から、依存の旧い版と新しい版を読む。
+
+    Dependabot は、1 つの依存なら「Bumps [名前](URL) from 旧 to 新.」と書く。
+    複数なら、依存ごとに「Updates `名前` from 旧 to 新」と書く。
+    """
+    quoted = re.escape(name)
+    for pattern in (
+        rf"^Updates `{quoted}` from (\S+) to (\S+)$",
+        rf"^Bumps \[{quoted}\]\([^)\s]*\) from (\S+) to (\S+?)\.$",
+    ):
+        found = re.findall(pattern, message, re.MULTILINE)
+        if len(found) == 1:
+            return found[0]
+    return None
+
+
+def update_type_of(dep: dict[str, str], message: str) -> str | None:
+    """更新の種別を返す。分からなければ None。
+
+    メタデータに種別があれば、それを使う。無ければ（セキュリティ更新）、版の数字から求める。
+    数字 3 つの版どうしで、1 つ目と 2 つ目が同じ、3 つ目が上がっているときだけ patch とする。
+    """
+    if dep.get("update-type"):
+        return dep["update-type"]
+    change = version_change(message, dep.get("dependency-name", ""))
+    if change is None or change[1] != dep.get("dependency-version"):
+        return None
+    old, new = change
+    if not PLAIN_VERSION.fullmatch(old) or not PLAIN_VERSION.fullmatch(new):
+        return None
+    before, after = ([int(part) for part in version.split(".")] for version in (old, new))
+    if before[:2] == after[:2] and after[2] > before[2]:
+        return PATCH
+    return None
+
+
+def in_auto_scope(dep: dict[str, str], update_type: str | None, policy: Policy) -> bool:
+    """更新が、自動マージの範囲に入るかを返す。"""
     group = dep.get("dependency-group")
-    update_type = dep.get("update-type")
-    if group == policy.patch_group:
+    # グループに属さないのは、セキュリティ更新と major。種別が patch なら、patch のグループと同じに扱う。
+    if group in (None, policy.patch_group):
         return update_type == PATCH
     if policy.dev_minor and group == policy.dev_minor_group:
         return update_type in (PATCH, MINOR) and dep.get("dependency-type") == DEV
@@ -217,12 +260,12 @@ def classify(pr: dict, policy: Policy) -> Decision:
         reasons.append("更新のメタデータを読めません")
     for dep in deps:
         name = dep.get("dependency-name", "?")
-        group = dep.get("dependency-group")
-        update_type = dep.get("update-type")
-        if group is None:
-            reasons.append(f"{name}: グループに属していません（セキュリティ更新など）")
-        elif not in_auto_scope(dep, policy):
-            reasons.append(f"{name}: {group} の {(update_type or '種別不明').rsplit(':', 1)[-1]} は人が見ます")
+        group = dep.get("dependency-group") or "グループなし"
+        update_type = update_type_of(dep, commits[-1]["message"])
+        if update_type is None:
+            reasons.append(f"{name}: 更新の種別を確かめられません。patch と確かめられた更新だけを自動で入れます")
+        elif not in_auto_scope(dep, update_type, policy):
+            reasons.append(f"{name}: {group} の {update_type.rsplit(':', 1)[-1]} は人が見ます")
 
     return Decision(auto=not reasons, reasons=tuple(dict.fromkeys(reasons)))
 

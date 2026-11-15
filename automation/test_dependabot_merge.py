@@ -102,10 +102,11 @@ class ClassifyTest(unittest.TestCase):
     def test_minor_inside_patch_group_is_human(self):
         self.assertFalse(classify(with_deps(dep(), dep("b", update="minor")), POLICY).auto)
 
-    def test_security_update_without_group_is_human(self):
-        decision = classify(with_deps(dep(group=None)), POLICY)
-        self.assertFalse(decision.auto)
-        self.assertIn("セキュリティ更新", decision.reasons[0])
+    def test_ungrouped_patch_with_update_type_is_auto(self):
+        self.assertTrue(classify(with_deps(dep(group=None)), POLICY).auto)
+
+    def test_ungrouped_major_is_human(self):
+        self.assertFalse(classify(with_deps(dep(update="major", group=None)), POLICY).auto)
 
     def test_unknown_group_is_human(self):
         self.assertFalse(classify(with_deps(dep(group="everything")), POLICY).auto)
@@ -271,6 +272,84 @@ class RuntimePatchTest(unittest.TestCase):
 
     def test_lockfile_patch_still_works_when_enabled(self):
         self.assertTrue(classify(pr(), RUNTIME).auto)
+
+
+def security_message(*changes: tuple[str, str, str], kind="direct:production") -> str:
+    """セキュリティ更新のコミットメッセージ。グループも種別も書かれない。"""
+    if len(changes) == 1:
+        name, old, new = changes[0]
+        prose = [f"Bumps [{name}](https://github.com/example/{name}) from {old} to {new}."]
+    else:
+        prose = ["Bumps several dependencies. These dependencies need to be updated together.", ""]
+        for name, old, new in changes:
+            prose += [f"Updates `{name}` from {old} to {new}", "- [Release notes](https://example.com)", ""]
+    lines = ["Bump something", "", *prose, "", "---", "updated-dependencies:"]
+    for name, _, new in changes:
+        lines += [f'- dependency-name: "{name}"', f"  dependency-version: {new}", f"  dependency-type: {kind}"]
+    return "\n".join([*lines, "...", "", "Signed-off-by: dependabot[bot] <support@github.com>"])
+
+
+def security_pr(*changes: tuple[str, str, str], **overrides) -> dict:
+    target = pr(**overrides)
+    target["commits"][0]["message"] = security_message(*changes)
+    return target
+
+
+class SecurityUpdateTest(unittest.TestCase):
+    """セキュリティ更新は、通常の更新と同じ条件で扱う。違いは待つ期間だけ。"""
+
+    def test_patch_is_auto(self):
+        self.assertTrue(classify(security_pr(("jinja2", "3.1.4", "3.1.6")), POLICY).auto)
+
+    def test_several_patches_are_auto(self):
+        target = security_pr(("@vitest/mocker", "5.0.0", "5.0.3"), ("vitest", "5.0.0", "5.0.3"))
+        self.assertTrue(classify(target, POLICY).auto)
+
+    def test_minor_is_human(self):
+        self.assertFalse(classify(security_pr(("vitest", "5.0.0", "5.1.0")), POLICY).auto)
+
+    def test_major_is_human(self):
+        self.assertFalse(classify(security_pr(("vitest", "5.0.9", "6.0.0")), POLICY).auto)
+
+    def test_one_minor_among_patches_is_human(self):
+        target = security_pr(("a", "1.0.0", "1.0.1"), ("b", "1.0.0", "1.1.0"))
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_downgrade_is_human(self):
+        self.assertFalse(classify(security_pr(("jinja2", "3.1.6", "3.1.4")), POLICY).auto)
+
+    def test_version_that_is_not_three_numbers_is_human(self):
+        self.assertFalse(classify(security_pr(("a", "1.0.0", "1.0.1rc1")), POLICY).auto)
+        self.assertFalse(classify(security_pr(("a", "1.0", "1.0.1")), POLICY).auto)
+
+    def test_prose_that_disagrees_with_metadata_is_human(self):
+        target = security_pr(("jinja2", "3.1.4", "3.1.6"))
+        target["commits"][0]["message"] = target["commits"][0]["message"].replace(
+            "dependency-version: 3.1.6", "dependency-version: 4.0.0"
+        )
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_missing_prose_is_human(self):
+        target = security_pr(("jinja2", "3.1.4", "3.1.6"))
+        target["commits"][0]["message"] = target["commits"][0]["message"].replace("Bumps [jinja2]", "Raises [jinja2]")
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_manifest_change_is_human(self):
+        target = security_pr(("jinja2", "3.1.4", "3.1.6"), files=["api/pyproject.toml", "api/uv.lock"])
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_message_copied_into_an_unsigned_commit_is_human(self):
+        target = security_pr(("jinja2", "3.1.4", "3.1.6"))
+        target["commits"][0].update(author="mallory", signed_by_github=False)
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_message_copied_and_pushed_by_a_person_is_human(self):
+        target = security_pr(("jinja2", "3.1.4", "3.1.6"), head_pushers=["mallory"])
+        self.assertFalse(classify(target, POLICY).auto)
+
+    def test_failed_check_goes_to_human(self):
+        plan = plan_for(security_pr(("jinja2", "3.1.4", "3.1.6"), check="failure"), POLICY)
+        self.assertFalse(plan.approve or plan.enqueue)
 
 
 class PlanTest(unittest.TestCase):
