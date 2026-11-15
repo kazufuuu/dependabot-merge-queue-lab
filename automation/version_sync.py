@@ -1,11 +1,11 @@
-"""見張り役の版を上げる Dependabot の PR に、正本の変更を積む。
+"""見張り役のバージョンを上げる Dependabot の PR に、正本の変更を積む。
 
 することは「決まった場所の値を、決まった場所に写す」ことだけ。
-新しい版を探すこと、待機を判断すること、PR を作ることは Dependabot に任せる。
+新しいバージョンを探すこと、cooldown を判断すること、PR を作ることは Dependabot に任せる。
 
 3 つの段に分かれている。鍵を持つのは push だけで、push は PR の中身を取り出さない。
 
-  prepare  対象の PR を 1 本選び、その head を pr/ に取り出して、見張り役の版を正本へ写す（鍵なし）
+  prepare  対象の PR を 1 本選び、その head を pr/ に取り出して、見張り役のバージョンを正本へ写す（鍵なし）
   collect  変わったファイルを確かめて集め、次の job に渡す（鍵なし）
   push     渡されたファイルを、App のトークンで PR のブランチにコミットする（鍵あり）
 
@@ -30,8 +30,8 @@ WORKTREE = Path("pr")
 # 積んでよいファイル。これ以外が変わっていたら、何もせずに失敗させる。
 ALLOWED = frozenset(versions.SOURCES[name] for name in versions.IMAGES)
 COMMIT_MESSAGE = (
-    "版の正本を versions/Dockerfile に合わせる\n\n"
-    "Dependabot が上げた見張り役の版を、正本へ写した。"
+    "バージョンの正本を versions/Dockerfile に合わせる\n\n"
+    "Dependabot が上げた見張り役のバージョンを、正本へ写した。"
 )
 
 
@@ -158,10 +158,10 @@ def create_commit(repo: str, token: str, parent: str, files: dict[str, str], mes
 def report_failure(repo: str, number: str, error: Exception) -> None:
     """失敗を PR に残す。人が何を直せばよいかを書く。"""
     body = (
-        "版の同期に失敗しました。この PR は、見張り役（`versions/Dockerfile`）と正本が食い違ったままです。\n\n"
+        "バージョンの同期に失敗しました。この PR は、見張り役（`versions/Dockerfile`）と正本が食い違ったままです。\n\n"
         f"- 理由: {error}\n"
         "- 直し方: この PR のブランチで `python3 automation/versions.py sync` を動かし、結果をコミットしてください。"
-        "スクリプトが版の記述を見つけられない場合は、理由に出ているファイルを確かめてください"
+        "スクリプトがバージョンの記述を見つけられない場合は、理由に出ているファイルを確かめてください"
     )
     try:
         gh("pr", "comment", number, "--repo", repo, "--body", body)

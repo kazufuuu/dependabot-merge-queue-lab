@@ -1,7 +1,7 @@
-"""動かしている Python の版が、正本と同じことを確かめる。
+"""動かしている Python のバージョンが、正本と同じことを確かめる。
 
-手元の版がずれていると、ここで落ちる。.python-version の版を入れる。
-uv の版は照合しない。手元の uv は、pyproject.toml の required-version の下限より新しければよい。
+手元のバージョンがずれていると、ここで落ちる。.python-version のバージョンを入れる。
+uv のバージョンは照合しない。手元の uv は、pyproject.toml の required-version の下限より新しければよい。
 """
 
 import platform

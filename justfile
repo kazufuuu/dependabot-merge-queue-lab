@@ -1,12 +1,12 @@
 # 人が手で打つ作業の入口。レシピの一覧は `just --list` で出る。
 # CI も同じレシピを呼ぶ（.github/workflows/ci.yml）。手元と CI で、動かすコマンドを揃えるため。
-# just の版は、直下の pyproject.toml の開発用の依存（rust-just）に範囲で書き、uv.lock が決める。
+# just のバージョンは、直下の pyproject.toml の開発用の依存（rust-just）に範囲で書き、uv.lock が決める。
 
 # レシピの一覧を出す
 default:
     @{{ just_executable() }} --list --unsorted
 
-# 手元の検査を全部動かす（本番のイメージの組み立ては除く）
+# 手元の検査を全部動かす（本番のイメージのビルドは除く）
 test: workspace api web infra automation
 
 # ワークスペース（packages/ と tests/）の lint とテスト
@@ -36,16 +36,16 @@ infra:
     terraform validate
     terraform test
 
-# 仕組み（振り分け、版の同期）のテストと、版が揃っていることの確認
+# 仕組み（振り分け、バージョンの同期）のテストと、バージョンが揃っていることの確認
 automation:
     python3 -m unittest discover -s automation
     python3 automation/versions.py check
 
-# 本番の API のイメージを組み立てる（引数は docker build に渡る。例: just image -t api）
+# 本番の API のイメージをビルドする（引数は docker build に渡る。例: just image -t api）
 image *args:
     scripts/build-api.sh {{ args }}
 
-# 使っている版（Python、Node、Terraform、uv、just）を出す
+# 使っているバージョン（Python、Node、Terraform、uv、just）を出す
 versions:
     @python3 automation/versions.py show
 

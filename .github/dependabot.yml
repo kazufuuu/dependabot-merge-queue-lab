@@ -1,16 +1,16 @@
-# 版は範囲で書き、範囲の中に収まる更新ではロックファイルだけが変わるようにする。
+# バージョンは範囲で書き、範囲の中に収まる更新ではロックファイルだけが変わるようにする。
 # npm は versioning-strategy: increase-if-necessary でそうなる。
 # uv ではこの値が効かないので、指定しない。pyproject.toml の [project] に description があり、
 # その名前が PyPI に無いと、Dependabot はライブラリとみなして範囲を広げる方針を選ぶ。
 # この方針では、範囲の中の更新は uv.lock だけが変わり、範囲を超える更新は pyproject.toml も変わる。
-# PR にまとめるのは、版が連動するライブラリ群だけにする（npm の vitest の群）。
+# PR にまとめるのは、バージョンが連動するライブラリ群だけにする（npm の vitest の群）。
 # それ以外は、patch も minor も major も、依存ごとに 1 本ずつ出す。
 # 注意: 更新の種類（patch、minor）でまとめるグループを作らない。種類のグループの PR が開いていると、
 # Dependabot はそのディレクトリの全部の依存を処理済みとみなし、ほかの更新を出さなくなる。
 # minor のグループの PR が人の判断を待っている間、patch の自動マージが止まった（実物で確かめた）。
 # open-pull-requests-limit は、依存の数より大きくする。人の判断待ちの PR で埋まると、patch の PR も出なくなる。
 # 例外は github-actions。人が判断するので、patch、minor、major を 1 本にまとめる。
-# セキュリティ更新はグループに入れない。待機もかからず、依存ごとにすぐ出る。
+# セキュリティ更新はグループに入れない。cooldown もかからず、依存ごとにすぐ出る。
 # 自動マージの条件は automation/dependabot_merge.py にある。所有者のレビューの決まりは settings/ にある。
 version: 2
 
@@ -58,7 +58,7 @@ updates:
     commit-message:
       prefix: deps
     groups:
-      # vitest と、その部品（@vitest/...）は、同じ版で一緒に上げる。版が食い違うと動かない。
+      # vitest と、その部品（@vitest/...）は、同じバージョンで一緒に上げる。バージョンが食い違うと動かない。
       vitest:
         applies-to: version-updates
         patterns: ["vitest", "@vitest/*"]
@@ -77,15 +77,15 @@ updates:
     commit-message:
       prefix: deps
 
-  # Python、Node、Terraform の本体の版の正本は、.python-version、.tool-versions、infra/versions.tf にある。
+  # Python、Node、Terraform の本体のバージョンの正本は、.python-version、.tool-versions、infra/versions.tf にある。
   # Dependabot はそこを書き換えられない。
   # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
-  # 待機（cooldown）は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
+  # cooldown は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
   # uv は、ここには置かない。直下の uv の設定が、ライブラリと同じく、pyproject.toml の開発用の依存として上げる。
   - package-ecosystem: docker
     directory: /versions
-    # コンテナイメージには、Dependabot のセキュリティ更新が無い。ここでは通常の更新だけを、待つ期間のあとに出す。
-    # Python と Node のセキュリティの修正を含む版は、security-release の workflow が待たずに出す。
+    # コンテナイメージには、Dependabot のセキュリティ更新が無い。ここでは通常の更新だけを、cooldown のあとに出す。
+    # Python と Node のセキュリティの修正を含むバージョンは、security-release の workflow が待たずに出す。
     schedule:
       interval: weekly
       day: monday

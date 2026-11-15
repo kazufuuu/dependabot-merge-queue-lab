@@ -214,14 +214,14 @@ class SignatureTest(unittest.TestCase):
 
 
 def runtime_pr(**overrides) -> dict:
-    """Dependabot が見張り役の python を上げ、版の同期が正本を積んだ PR。"""
+    """Dependabot が見張り役の python を上げ、バージョンの同期が正本を積んだ PR。"""
     first = {
         "message": message(dep("python")),
         "author": "dependabot[bot]",
         "signed_by_github": True,
         "pushers": ["dependabot[bot]"],
     }
-    second = {"message": "版の正本を合わせる", "author": "sync-app[bot]", "signed_by_github": True, "pushers": ["sync-app[bot]"]}
+    second = {"message": "バージョンの正本を合わせる", "author": "sync-app[bot]", "signed_by_github": True, "pushers": ["sync-app[bot]"]}
     base = {
         "commits": [first, second],
         "head_pushers": ["sync-app[bot]"],
@@ -266,7 +266,7 @@ def security_pr(*changes: tuple[str, str, str], **overrides) -> dict:
 
 
 class SecurityUpdateTest(unittest.TestCase):
-    """セキュリティ更新は、通常の更新と同じ条件で扱う。違いは待つ期間だけ。"""
+    """セキュリティ更新は、通常の更新と同じ条件で扱う。違いは cooldown だけ。"""
 
     def test_patch_is_auto(self):
         self.assertTrue(classify(security_pr(("jinja2", "3.1.4", "3.1.6")), POLICY).auto)

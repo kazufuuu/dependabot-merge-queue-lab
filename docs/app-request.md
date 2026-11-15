@@ -16,16 +16,16 @@
 
 | 用語 | 意味 |
 |---|---|
-| Dependabot | GitHub の機能。使っているライブラリの新しい版を見つけ、更新の PR を自動で出す |
+| Dependabot | GitHub の機能。使っているライブラリの新しいバージョンを見つけ、更新の PR を自動で出す |
 | PR | pull request。変更を main に入れる前の、レビューの単位 |
-| patch の更新 | 版の 3 つ目の数字だけが上がる更新（1.2.3 から 1.2.4）。不具合の修正が中心 |
-| ロックファイル | 実際に使う版を記録するファイル。人が書くのではなく、道具が書き出す |
+| patch の更新 | バージョンの 3 つ目の数字だけが上がる更新（1.2.3 から 1.2.4）。不具合の修正が中心 |
+| ロックファイル | 実際に使うバージョンを記録するファイル。人が書くのではなく、道具が書き出す |
 | 検査 | PR ごとに自動で動くテスト |
 | マージキュー | 承認済みの PR を並べ、最新の main と合わせて検査し直してから入れる、GitHub の待ち行列 |
 | workflow | リポジトリに置いた自動処理（GitHub Actions） |
 | `GITHUB_TOKEN` | workflow に自動で渡る、そのリポジトリ用の一時的な権限 |
 | environment | secret の置き場所。使えるブランチを絞れる |
-| 待機（cooldown） | Dependabot の設定。公開から決めた日数がたつまで、その版を提案しない |
+| cooldown | Dependabot の設定。公開から決めた日数がたつまで、そのバージョンを提案しない |
 | ruleset | ブランチやタグの保護の決まり。レビューや検査を必須にする |
 
 ## 目的
@@ -68,12 +68,12 @@ App を入れたあと、この設定は組織とリポジトリの両方で無�
 
 ## 権限
 
-App の用途は 3 つです。条件を満たした PR の承認とマージ、Dependabot が上げた版を正本のファイルへ写すコミット（README の「版の更新の流れ」）、そして、Python と Node のセキュリティの修正を含む版に上げる PR の作成です（README の「セキュリティの修正への追随」）。
+App の用途は 3 つです。条件を満たした PR の承認とマージ、Dependabot が上げたバージョンを正本のファイルへ写すコミット（README の「バージョンの更新の流れ」）、そして、Python と Node のセキュリティの修正を含むバージョンに上げる PR の作成です（README の「セキュリティの修正への追随」）。
 
 | 権限 | 水準 | 使う操作 |
 |---|---|---|
-| Contents | 書き込み | PR をマージキューに入れ、main に入れる。Dependabot の PR のブランチに、版を写すコミットを積む。セキュリティの修正を含む版に上げるブランチを作る |
-| Pull requests | 書き込み | PR を承認する。`automerge` ラベルを付ける。セキュリティの修正を含む版に上げる PR を出す |
+| Contents | 書き込み | PR をマージキューに入れ、main に入れる。Dependabot の PR のブランチに、バージョンを写すコミットを積む。セキュリティの修正を含むバージョンに上げるブランチを作る |
+| Pull requests | 書き込み | PR を承認する。`automerge` ラベルを付ける。セキュリティの修正を含むバージョンに上げる PR を出す |
 | Metadata | 読み取り | GitHub が自動で付ける |
 
 この 2 つで足りることは、実物で確かめました。[PR #12](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12) と [PR #34](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/34) は、この権限だけの App が承認し、マージしています。
@@ -87,13 +87,13 @@ Webhook は使いません。App は外部のサーバーを持たず、通知�
 
 ## App の動き
 
-App のトークンを使う job は 3 つです。どれも main の版で動き、PR の中身を実行しません。
+App のトークンを使う job は 3 つです。どれも main のバージョンで動き、PR の中身を実行しません。
 
 | workflow と job | すること |
 |---|---|
 | `dependabot-merge` の `merge` | 条件を満たした PR を承認し、マージキューに入れる |
-| `version-sync` の `push` | Dependabot が見張り役の版を上げた PR に、正本のファイルの変更を積む |
-| `security-release` の `open` | Python と Node のセキュリティの修正を含む版に上げる PR を出す |
+| `version-sync` の `push` | Dependabot が見張り役のバージョンを上げた PR に、正本のファイルの変更を積む |
+| `security-release` の `open` | Python と Node のセキュリティの修正を含むバージョンに上げる PR を出す |
 
 `merge` は、次の条件をすべて満たす PR だけを承認し、マージキューに入れます。
 
@@ -102,7 +102,7 @@ App のトークンを使う job は 3 つです。どれも main の版で動�
 3. そのコミットの作者が Dependabot で、GitHub 自身の鍵で署名されている
 4. その head を push したのが Dependabot である
 5. 変わったファイルがロックファイルだけである
-6. 更新がすべて patch である。脆弱性の修正として出る更新（セキュリティ更新）も、同じ条件で扱う。違いは、待機がかからないことだけ
+6. 更新がすべて patch である。脆弱性の修正として出る更新（セキュリティ更新）も、同じ条件で扱う。違いは、cooldown がかからないことだけ
 7. 検査がすべて通っている
 
 3 と 4 の確かめ方は次のとおりです。
@@ -118,14 +118,14 @@ App がしないことは次のとおりです。
 - 人が出した PR を承認しない
 - ロックファイル以外が変わる PR を承認しない。承認しても通りません。ロックファイル以外には所有者のレビューが必須で、App は所有者になれないからです
 - 検査が落ちた PR を承認しない
-- Python、Node、Terraform の本体の版を上げる PR を承認しない。patch も含めて、すべて人が判断します
+- Python、Node、Terraform の本体のバージョンを上げる PR を承認しない。patch も含めて、すべて人が判断します
 - main に直接 push しない。main への変更は、PR とマージキューを必ず通ります
 
 この動きを保証している仕組みは次のとおりです。
 
 | 仕組み | 効き目 |
 |---|---|
-| 判定は main に入っている版で動く | PR の中身で判定を書き換えられない。判定を変えるには、所有者のレビューを通す必要がある |
+| 判定は main に入っているバージョンで動く | PR の中身で判定を書き換えられない。判定を変えるには、所有者のレビューを通す必要がある |
 | 鍵は environment `automerge` の secret に置く。この environment は main だけが使える | main 以外のブランチの workflow は、鍵を読めない |
 | ブランチ保護（ruleset）で、すべてのファイルに所有者のレビューを必須にする。ロックファイルの規則だけ、App を対象から外す | App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られる。人が出した PR は、ロックファイルだけでも所有者の承認が要る |
 | 必須の検査は、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
@@ -219,7 +219,7 @@ App がしないことは次のとおりです。
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 46 回です（2026-11-14 に 15 回、11-15 に 31 回）。
+そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 47 回です（2026-11-14 に 15 回、11-15 に 32 回）。
 11-15 の途中からは、`owners-lockfiles` と `owners-others` も同時に無効にしています。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
 人が 2 人以上いる組織では、この操作は要りません。
@@ -227,31 +227,31 @@ ruleset は「自分の PR を自分で承認できない」ので、ruleset を
 ruleset の対象から外す主体は、1 つだけ登録しています。`owners-lockfiles`（ロックファイルの所有者のレビュー）に、自動マージの App です。
 `main`（PR、承認、検査、マージキュー）と `owners-others`（ロックファイル以外の所有者のレビュー）には、登録していません。
 
-## 待機の効く範囲
+## cooldown の効く範囲
 
-待機は 7 日に設定しています。ただし、配布元によって効くものと効かないものがあります。
+cooldown は 7 日に設定しています。ただし、配布元によって効くものと効かないものがあります。
 設定は受け付けられ、警告も出ないので、効いていないことに気づきにくい点に注意が要ります。
 
-| 配布元 | 待機 | 確かめ方 | 実例 |
+| 配布元 | cooldown | 確かめ方 | 実例 |
 |---|---|---|---|
 | Docker Hub のイメージ | 効く | このリポジトリの Dependabot の実行 | terraform は 1.17.2（公開 3 日後）ではなく 1.17.1、node は 24.22.3 ではなく 24.22.2、python は 3.13.18 ではなく 3.13.17 が選ばれた。ログは「Skipping tag 1.17.2 due to cooldown period」 |
 | Docker Hub 以外のイメージ（ghcr.io など） | 効かない | このリポジトリの Dependabot の実行 | ghcr.io の uv は、公開 2 日後の 0.13.8 が選ばれた（[PR #23](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/23)）。ログは「No verified registry publication date source for ghcr.io; skipping cooldown for astral-sh/uv:0.13.8」 |
 | PyPI | 効く | このリポジトリの Dependabot の実行 | humanize は 4.17.0（公開 2 日後）ではなく 4.16.0 が選ばれた。ログは「Filtered out 1 versions due to cooldown」 |
-| npm | 効く | 手元で Dependabot の本体を動かした | libphonenumber-js は、公開 4 日後の 1.13.16 が提案されなかった。待機を 0 日にすると提案された |
-| Terraform のレジストリ | 効く | 手元で Dependabot の本体を動かした | hashicorp/azurerm は、公開 1 日後の 5.14.0 が提案されなかった。待機を 0 日にすると提案された |
-| GitHub Actions | 効く。ただし数え方が違う | 手元で Dependabot の本体を動かした | 公開 4 日後の版は提案されず、1 つ前の版が提案された。日数は、公開日ではなく、タグが指すコミットの日付で数えていた。古いコミットにあとからタグを付けた版は、公開の直後でも待機を通る |
-| セキュリティ更新 | かからない | 試していない | GitHub の仕様では、待機はセキュリティ更新にかからない。このリポジトリで出たセキュリティ更新は、どれも公開から 7 日以上たった版だったので、実例にならない |
+| npm | 効く | 手元で Dependabot の本体を動かした | libphonenumber-js は、公開 4 日後の 1.13.16 が提案されなかった。cooldown を 0 日にすると提案された |
+| Terraform のレジストリ | 効く | 手元で Dependabot の本体を動かした | hashicorp/azurerm は、公開 1 日後の 5.14.0 が提案されなかった。cooldown を 0 日にすると提案された |
+| GitHub Actions | 効く。ただし数え方が違う | 手元で Dependabot の本体を動かした | 公開 4 日後のバージョンは提案されず、1 つ前のバージョンが提案された。日数は、公開日ではなく、タグが指すコミットの日付で数えていた。古いコミットにあとからタグを付けたバージョンは、公開の直後でも cooldown を通る |
+| セキュリティ更新 | かからない | 試していない | GitHub の仕様では、cooldown はセキュリティ更新にかからない。このリポジトリで出たセキュリティ更新は、どれも公開から 7 日以上たったバージョンだったので、実例にならない |
 
 「手元で動かした」は、Dependabot の本体（dependabot-core）を dependabot CLI で動かした結果です。GitHub のサービス上の実行ではありません。
-Docker Hub 以外で効かない理由は、Dependabot の実装にあります。イメージの公開日を取る処理が Docker Hub にしか無く、取れないときは待機を飛ばします（dependabot-core の `docker/lib/dependabot/docker/update_checker.rb`）。ghcr.io に限らず、Docker Hub 以外のレジストリは同じ扱いです。
-待機を設定に書かない場合も、Dependabot の本体は 3 日の待機をかけます。
+Docker Hub 以外で効かない理由は、Dependabot の実装にあります。イメージの公開日を取る処理が Docker Hub にしか無く、取れないときは cooldown を飛ばします（dependabot-core の `docker/lib/dependabot/docker/update_checker.rb`）。ghcr.io に限らず、Docker Hub 以外のレジストリは同じ扱いです。
+cooldown を設定に書かない場合も、Dependabot の本体は 3 日の cooldown をかけます。
 
 自動マージの対象になるのは、ロックファイルだけを変える更新です。配布元は PyPI、npm、Terraform のレジストリの 3 つです。
-コンテナイメージと GitHub Actions の更新は、版を書いたファイルが変わるので、待機が効くかどうかに関係なく、所有者のレビューを通ります。
+コンテナイメージと GitHub Actions の更新は、バージョンを書いたファイルが変わるので、cooldown が効くかどうかに関係なく、所有者のレビューを通ります。
 
 コンテナイメージは Docker Hub のものを使う決まりにしました。
-uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、待機を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/versions.py check`）が落ちます。
-Docker Hub に無いイメージを使うときは、待機が効かないと承知したうえで、人のレビューで守ります。
+uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、cooldown を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/versions.py check`）が落ちます。
+Docker Hub に無いイメージを使うときは、cooldown が効かないと承知したうえで、人のレビューで守ります。
 Docker Hub には、認証なしで取得できる回数に制限があります。検査が取得で失敗するようになったら、認証を足します。
 
 ## 残る危険
@@ -260,16 +260,16 @@ Docker Hub には、認証なしで取得できる回数に制限があります
 
 - リポジトリの管理者は、environment の使えるブランチや、ruleset を変えられます。管理者は、App が無くても保護を外せる立場です。管理者を絞ることが対策です
 - 鍵が漏れたときにできることは、上の表のとおりです
-- 配布元で悪意のある patch が公開され、待機の日数を過ぎても発覚せず、検査も通ると、自動で入ります。待機は発覚までの時間を取るもので、防ぐものではありません
-- セキュリティ更新の patch は、待機なしで自動で入ります。対象は、GitHub の脆弱性のデータベースに登録された修正に限られます。検査は通す必要があります。修正の版そのものに悪意のある変更が混ざっていた場合、待機による猶予はありません
-- Python と Node のセキュリティの修正を含む版は、外部の公開情報（nodejs.org、OSV、python/cpython）で見分けます。情報が誤っていると、通常の版を待たずに PR にするか、修正の版を見逃します。どちらの場合も、PR のマージには所有者のレビューが要り、見逃した版は 7 日後に通常の更新として出ます
+- 配布元で悪意のある patch が公開され、cooldown の日数を過ぎても発覚せず、検査も通ると、自動で入ります。cooldown は発覚までの時間を取るもので、防ぐものではありません
+- セキュリティ更新の patch は、cooldown なしで自動で入ります。対象は、GitHub の脆弱性のデータベースに登録された修正に限られます。検査は通す必要があります。修正のバージョンそのものに悪意のある変更が混ざっていた場合、cooldown による猶予はありません
+- Python と Node のセキュリティの修正を含むバージョンは、外部の公開情報（nodejs.org、OSV、python/cpython）で見分けます。情報が誤っていると、通常のバージョンを待たずに PR にするか、修正のバージョンを見逃します。どちらの場合も、PR のマージには所有者のレビューが要り、見逃したバージョンは 7 日後に通常の更新として出ます
 - 人が出した、ロックファイルだけを変える PR は、人の操作では、所有者の承認なしに通りません。通せるのは App だけです。App の判定は Dependabot の PR だけを対象にするので、この経路が開くのは、鍵が漏れたときか、判定に誤りがあるときです
 - 判定の workflow は、GitHub が配る部品（`actions/checkout`）を 1 つ使います。動かすコミットは、workflow のロックファイル（`.github/workflows/actions.lock`）で固定しています
 
 悪意のある更新が入ったと分かったときの手順は次のとおりです。
 
 1. 止める。リポジトリの書き込み権限のある人が、workflow `dependabot-merge` を無効にする。組織の所有者は、App を止める（Suspend）こともできる。Suspend は試していない
-2. 探す。`automerge` ラベルの付いたマージ済みの PR を一覧にする。PR には、更新した依存と版、承認とマージの時刻が残っている
+2. 探す。`automerge` ラベルの付いたマージ済みの PR を一覧にする。PR には、更新した依存とバージョン、承認とマージの時刻が残っている
 3. 戻す。その PR を打ち消す PR を出す。人が出す PR なので、通常のレビューを通る
 
 ## 作業のあとに確かめる項目

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# API のイメージを、正本の版で組み立てる。
+# API のイメージを、正本のバージョンでビルドする。
 # 使い方: scripts/build-api.sh [docker build に渡す引数...]
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"

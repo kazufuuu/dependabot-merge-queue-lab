@@ -1,7 +1,7 @@
 name: security-release
 
-# Python と Node のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
-# 通常の更新は Dependabot が、待つ期間のあとに出す。スクリプトは常に main の版で動かす。
+# Python と Node のセキュリティの修正を含むバージョンを見つけ、待たずに PR を出す。
+# 通常の更新は Dependabot が、cooldown のあとに出す。スクリプトは常に main のバージョンで動かす。
 on:
   schedule:
     - cron: "47 */4 * * *"
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 鍵を持たない。公開されている情報を読み、上げる版を決める。
+  # 鍵を持たない。公開されている情報を読み、上げるバージョンを決める。
   find:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -26,13 +26,13 @@ jobs:
       payload: ${{ steps.find.outputs.payload }}
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: セキュリティの修正を含む版を探す
+      - name: セキュリティの修正を含むバージョンを探す
         id: find
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 automation/security_release.py find
 
-  # 鍵を持つ。渡された版で main のファイルを書き換え、ブランチと PR を作る。
+  # 鍵を持つ。渡されたバージョンで main のファイルを書き換え、ブランチと PR を作る。
   open:
     needs: find
     if: needs.find.outputs.payload != ''

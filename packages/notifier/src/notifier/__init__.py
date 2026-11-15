@@ -9,7 +9,7 @@ PUSH_SUPPORTED = SpecifierSet(">=2.4,<4")
 
 
 def supports_push(client_version: str) -> bool:
-    """クライアントの版が push 通知に対応しているかを返す。"""
+    """クライアントのバージョンが push 通知に対応しているかを返す。"""
     try:
         version = Version(client_version)
     except InvalidVersion:

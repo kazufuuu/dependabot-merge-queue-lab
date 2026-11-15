@@ -15,14 +15,14 @@ concurrency:
 
 # テストは runner の上で直接動かす。動かすコマンドは justfile のレシピで、手元と同じものを呼ぶ。
 # job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
-# 版は正本から読む。
+# バージョンは正本から読む。
 # - Python: .python-version（setup-python が読んで入れる）
 # - Node: .tool-versions（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
-# - uv、just: uv.lock に入っている版（automation/versions.py が読んで渡す）
+# - uv、just: uv.lock に入っているバージョン（automation/versions.py が読んで渡す）
 # Python は setup-python が入れ、uv には取ってこさせない（UV_PYTHON_DOWNLOADS）。
 # uv は、取ってこられる Python の一覧を自分の中に持つ。古い uv は新しい Python を知らないので、
-# uv に取ってこさせると、Python の patch の更新が、uv の版のせいで落ちる。
+# uv に取ってこさせると、Python の patch の更新が、uv のバージョンのせいで落ちる。
 env:
   UV_PYTHON_DOWNLOADS: never
 
@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: 版を正本から読む
+      - name: バージョンを正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v7.1.0
@@ -54,7 +54,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: 版を正本から読む
+      - name: バージョンを正本から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -79,7 +79,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: 版を正本から読む
+      - name: バージョンを正本から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -101,7 +101,7 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: Terraform の版を正本から読む
+      - name: Terraform のバージョンを正本から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -119,16 +119,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: 版を正本から読む
+      - name: バージョンを正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - name: just を入れる
         run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - name: 振り分けと版の同期のテスト。版の正本と見張り役が揃っていることも確かめる
+      - name: 振り分けとバージョンの同期のテスト。バージョンの正本と見張り役が揃っていることも確かめる
         run: just automation
 
-  # 本番のイメージが組み立てられることを確かめる。起動の確認とテストは、ここでは行わない。
-  # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、組み立てが落ちる更新がある。
+  # 本番のイメージがビルドできることを確かめる。起動の確認とテストは、ここでは行わない。
+  # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、ビルドが落ちる更新がある。
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -139,12 +139,12 @@ jobs:
           path: /tmp/buildcache
           key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', 'uv.lock') }}
           restore-keys: image-
-      - name: 版を正本から読む
+      - name: バージョンを正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - name: just を入れる
         run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - name: API のイメージを正本の版で組み立てる
+      - name: API のイメージを正本のバージョンでビルドする
         run: |
           docker buildx create --name ci --use >/dev/null
           just image --builder ci \
@@ -152,7 +152,7 @@ jobs:
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache
 
-  # 必須の検査はこの 1 つだけにする。テストとイメージの組み立てが、すべて成功したときだけ成功する。
+  # 必須の検査はこの 1 つだけにする。テストとイメージのビルドが、すべて成功したときだけ成功する。
   all-green:
     if: always()
     needs: [workspace, api, web, infra, automation, image]

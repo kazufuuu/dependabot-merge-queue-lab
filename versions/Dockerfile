@@ -1,11 +1,11 @@
-# 版を管理する場所ではない。版を確かめるとき、変えるときは、ここではなく正本を見る。
+# バージョンを管理する場所ではない。バージョンを確かめるとき、変えるときは、ここではなく正本を見る。
 # 正本は、.python-version（Python）、.tool-versions（Node）、infra/versions.tf（Terraform）。
 # 正本を書き換えたあと、python3 automation/versions.py align を動かすと、このファイルが揃う。
 #
-# Dependabot に新しい版を見つけさせるためのファイル。このイメージは組み立てない。
+# Dependabot に新しいバージョンを見つけさせるためのファイル。このイメージはビルドしない。
 # Dependabot は、.python-version などの正本を書き換えられない。
 # 書き換えられるのは FROM なので、ここを上げさせ、automation/versions.py が正本へ写す。
-# イメージは Docker Hub のものに限る。待機（cooldown）が Docker Hub にしか効かないため。
+# イメージは Docker Hub のものに限る。cooldown が Docker Hub にしか効かないため。
 # FROM の間には行を挟む。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突する。
 
 # Python（正本は .python-version）

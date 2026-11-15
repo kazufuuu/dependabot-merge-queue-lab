@@ -1,6 +1,6 @@
 name: dependabot-merge
 
-# 判定は常に main の版で動かす。PR の中身は checkout しない。
+# 判定は常に main のバージョンで動かす。PR の中身は checkout しない。
 on:
   workflow_run:
     workflows: [ci]

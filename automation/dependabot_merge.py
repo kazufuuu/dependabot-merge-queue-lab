@@ -11,9 +11,9 @@
 - 更新の種別がすべて patch（設定で、開発用の依存の minor も足せる）
 - 必須の検査が、その head で成功している
 
-セキュリティ更新も、同じ条件で扱う。通常の更新との違いは、待つ期間が無いことだけ。
+セキュリティ更新も、同じ条件で扱う。通常の更新との違いは、cooldown が無いことだけ。
 セキュリティ更新はグループに属さず、メタデータに種別も書かれない。
-種別は、同じコミットメッセージに Dependabot が書く「from 旧 to 新」の版から求める。
+種別は、同じコミットメッセージに Dependabot が書く「from 旧 to 新」のバージョンから求める。
 
 開発用の依存の minor は、設定（AUTOMERGE_DEV_MINOR）で足せる。既定では無効。
 Python と Node の本体の更新は、ロックファイル以外が変わるので、patch でも人が判断する。
@@ -127,7 +127,7 @@ PLAIN_VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 def version_change(message: str, name: str) -> tuple[str, str] | None:
-    """コミットメッセージの本文から、依存の旧い版と新しい版を読む。
+    """コミットメッセージの本文から、依存の旧いバージョンと新しいバージョンを読む。
 
     Dependabot は、1 つの依存なら「Bumps [名前](URL) from 旧 to 新.」と書く。
     複数なら、依存ごとに「Updates `名前` from 旧 to 新」と書く。
@@ -146,8 +146,8 @@ def version_change(message: str, name: str) -> tuple[str, str] | None:
 def update_type_of(dep: dict[str, str], message: str) -> str | None:
     """更新の種別を返す。分からなければ None。
 
-    メタデータに種別があれば、それを使う。無ければ（セキュリティ更新）、版の数字から求める。
-    数字 3 つの版どうしで、1 つ目と 2 つ目が同じ、3 つ目が上がっているときだけ patch とする。
+    メタデータに種別があれば、それを使う。無ければ（セキュリティ更新）、バージョンの数字から求める。
+    数字 3 つのバージョンどうしで、1 つ目と 2 つ目が同じ、3 つ目が上がっているときだけ patch とする。
     """
     if dep.get("update-type"):
         return dep["update-type"]

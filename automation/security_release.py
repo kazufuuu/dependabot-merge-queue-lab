@@ -1,21 +1,21 @@
-"""Python と Node のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
+"""Python と Node のセキュリティの修正を含むバージョンを見つけ、待たずに PR を出す。
 
 コンテナのイメージには、Dependabot のセキュリティ更新が無い。Dependabot は、公式イメージの
-新しい版を、通常の更新として、待つ期間のあとに出す。セキュリティの修正を含む版だけは、
+新しいバージョンを、通常の更新として、cooldown のあとに出す。セキュリティの修正を含むバージョンだけは、
 この処理が、待たずに見張り役と正本を上げる PR を出す。
 
 見分け方は、公開されている情報を機械的に読むだけ。
 
-- Node: https://nodejs.org/dist/index.json の、版ごとの security の値
-- Python: 今の版に効く脆弱性を OSV（https://osv.dev）に聞き、その修正のコミットが
-  新しい版に入っているかを、GitHub の python/cpython で確かめる
+- Node: https://nodejs.org/dist/index.json の、バージョンごとの security の値
+- Python: 今のバージョンに効く脆弱性を OSV（https://osv.dev）に聞き、その修正のコミットが
+  新しいバージョンに入っているかを、GitHub の python/cpython で確かめる
 
 uv は PyPI のパッケージなので、Dependabot のセキュリティ更新が届く。ここでは扱わない。
 
 2 つの段に分かれている。鍵を持つのは open だけで、open は main のファイルしか読まない。
 
-  find  上げる版を決める（鍵なし）。公式イメージがまだ公開されていない版は、次の回に回す
-  open  渡された版ごとに、main のファイルを書き換えたブランチと PR を作る（鍵あり）。Python と Node は別の PR
+  find  上げるバージョンを決める（鍵なし）。公式イメージがまだ公開されていないバージョンは、次の回に回す
+  open  渡されたバージョンごとに、main のファイルを書き換えたブランチと PR を作る（鍵あり）。Python と Node は別の PR
 
 PR は App が出すので、自動マージの対象にならない。所有者のレビューが要る。
 """
@@ -53,7 +53,7 @@ Version = tuple[int, int, int]
 
 def parse(version: str) -> Version:
     if not PLAIN.fullmatch(version):
-        raise ValueError(f"版の形が違います: {version}")
+        raise ValueError(f"バージョンの形が違います: {version}")
     major, minor, patch = (int(part) for part in version.split("."))
     return major, minor, patch
 
@@ -72,11 +72,11 @@ def fetch_json(url: str, body: dict | None = None) -> object:
         return json.load(response)
 
 
-# ここから、版を決める処理。外から取った値は、形を確かめてから使う。
+# ここから、バージョンを決める処理。外から取った値は、形を確かめてから使う。
 
 
 def node_security_release(current: Version, index: list[dict]) -> Version | None:
-    """同じ major の中で、今より新しく、security が true の版のうち、いちばん新しいものを返す。"""
+    """同じ major の中で、今より新しく、security が true のバージョンのうち、いちばん新しいものを返す。"""
     found: list[Version] = []
     for release in index:
         name = str(release.get("version", ""))
@@ -89,7 +89,7 @@ def node_security_release(current: Version, index: list[dict]) -> Version | None
 
 
 def python_candidates(current: Version, tags: list[str]) -> list[Version]:
-    """同じ minor の中で、今より新しい版を、古い順に返す。"""
+    """同じ minor の中で、今より新しいバージョンを、古い順に返す。"""
     found = {parse(tag[1:]) for tag in tags if tag.startswith("v") and PLAIN.fullmatch(tag[1:])}
     return sorted(version for version in found if version[:2] == current[:2] and version > current)
 
@@ -109,9 +109,9 @@ def fixed_commits(vulnerability: dict) -> set[str]:
 def python_security_release(
     candidates: list[Version], vulnerabilities: list[dict], new_commits: dict[Version, set[str]]
 ) -> tuple[Version, list[str]] | None:
-    """今の版に効く脆弱性の修正が、初めて入った版のうち、いちばん新しいものを返す。
+    """今のバージョンに効く脆弱性の修正が、初めて入ったバージョンのうち、いちばん新しいものを返す。
 
-    new_commits は、版ごとの、1 つ前の版には無いコミット。
+    new_commits は、バージョンごとの、1 つ前のバージョンには無いコミット。
     """
     result: tuple[Version, list[str]] | None = None
     for version in candidates:
@@ -190,7 +190,7 @@ def branch_part(name: str, version: Version) -> str:
 
 
 def proposed_parts(repo: str) -> set[str]:
-    """これまでに出した PR のブランチ名から、名前と版の組を集める。閉じられた PR も数える。"""
+    """これまでに出した PR のブランチ名から、名前とバージョンの組を集める。閉じられた PR も数える。"""
     out = gh("api", "--paginate", f"repos/{repo}/pulls?state=all&per_page=100", "--jq", ".[].head.ref")
     return {
         part
@@ -208,7 +208,7 @@ def find(repo: str, root: Path) -> None:
         now = parse(current[name])
         found = finder(now)
         if found is None:
-            print(f"{name}: {show(now)} より新しい、セキュリティの修正を含む版はありません")
+            print(f"{name}: {show(now)} より新しい、セキュリティの修正を含むバージョンはありません")
             continue
         version, reasons = found
         if branch_part(name, version) in proposed:
@@ -221,11 +221,11 @@ def find(repo: str, root: Path) -> None:
     write_output(payload=encode({"targets": targets}) if targets else "")
 
 
-# ここから、PR を出す処理。main のファイルと、渡された版だけを使う。
+# ここから、PR を出す処理。main のファイルと、渡されたバージョンだけを使う。
 
 
 def validate_target(target: dict, current: dict[str, str]) -> tuple[str, Version, list[str]]:
-    """渡された版を確かめる。同じ系列の中の、今より新しい版だけを受け付ける。"""
+    """渡されたバージョンを確かめる。同じ系列の中の、今より新しいバージョンだけを受け付ける。"""
     name = target.get("name")
     if name not in NAMES:
         raise SyncError(f"対象にしない名前です: {name}")
@@ -243,20 +243,20 @@ def validate_target(target: dict, current: dict[str, str]) -> tuple[str, Version
 
 def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
     if name == "python":
-        basis = "今の版に効く次の脆弱性の修正が、この版に入っています。\n\n" + "\n".join(
+        basis = "今のバージョンに効く次の脆弱性の修正が、このバージョンに入っています。\n\n" + "\n".join(
             f"- [{reason}](https://osv.dev/vulnerability/{reason})" for reason in reasons
         )
     else:
-        basis = f"[Node.js の版の一覧]({NODE_INDEX})で、この版の `security` が `true` です。"
+        basis = f"[Node.js のバージョンの一覧]({NODE_INDEX})で、このバージョンの `security` が `true` です。"
     return (
-        f"{name} を {old} から {new} に上げます。セキュリティの修正を含む版なので、待つ期間を置かずに出しています。\n\n"
+        f"{name} を {old} から {new} に上げます。セキュリティの修正を含むバージョンなので、cooldown を置かずに出しています。\n\n"
         f"{basis}\n\n"
         "`automation/security_release.py` が出しました。自動ではマージされません。レビューをお願いします。"
     )
 
 
 def changed_files(root: Path, name: str, version: Version) -> dict[str, str]:
-    """その版に上げたときに変わるファイルと、その中身を返す。手元のファイルは元に戻す。"""
+    """そのバージョンに上げたときに変わるファイルと、その中身を返す。手元のファイルは元に戻す。"""
     touched = [versions.SOURCES[name], versions.SENTINEL]
     before = {path: (root / path).read_text() for path in touched}
     try:
@@ -271,11 +271,11 @@ def changed_files(root: Path, name: str, version: Version) -> dict[str, str]:
 
 
 def open_pull_requests(repo: str, root: Path, targets: list[dict]) -> None:
-    """渡された版ごとに、1 本ずつ PR を出す。どれも main から枝を切る。"""
+    """渡されたバージョンごとに、1 本ずつ PR を出す。どれも main から枝を切る。"""
     current = versions.read_sources(root)
     changes = [validate_target(target, current) for target in targets]
     if not changes or len({name for name, _, _ in changes}) != len(changes):
-        raise SyncError("渡された版の組が正しくありません")
+        raise SyncError("渡されたバージョンの組が正しくありません")
     base = gh("api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha").strip()
     token = app_token(repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"])
     for name, version, reasons in changes:
