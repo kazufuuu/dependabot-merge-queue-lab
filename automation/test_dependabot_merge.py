@@ -18,12 +18,8 @@ POLICY = Policy(
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
     patch_group="patch",
     dev_minor_group="dev-minor",
-    sync_app="sync-app[bot]",
-    sentinel="versions/Dockerfile",
-    runtime_files={"python": ".python-version", "node": "web/.node-version"},
 )
 DEV_MINOR = Policy(**{**POLICY.__dict__, "dev_minor": True})
-RUNTIME = Policy(**{**POLICY.__dict__, "runtime_patch": True})
 
 
 def message(*deps: dict) -> str:
@@ -210,68 +206,18 @@ def runtime_pr(**overrides) -> dict:
     return pr(**{**base, **overrides})
 
 
-class RuntimePatchTest(unittest.TestCase):
-    def change(self, index: int, **fields) -> dict:
-        target = runtime_pr()
-        target["commits"][index] = {**target["commits"][index], **fields}
-        return target
+class RuntimeTest(unittest.TestCase):
+    """Python と Node の本体の更新は、patch でも人が判断する。"""
 
-    def test_disabled_by_default(self):
+    def test_patch_with_sync_commit_is_human(self):
         self.assertFalse(classify(runtime_pr(), POLICY).auto)
 
-    def test_python_patch_with_sync_commit_is_auto_when_enabled(self):
-        self.assertTrue(classify(runtime_pr(), RUNTIME).auto)
-
-    def test_python_and_node_together_are_auto(self):
-        target = self.change(0, message=message(dep("python"), dep("node")))
-        target["files"] = ["versions/Dockerfile", ".python-version", "web/.node-version"]
-        self.assertTrue(classify(target, RUNTIME).auto)
-
-    def test_other_image_is_human(self):
-        target = self.change(0, message=message(dep("hashicorp/terraform")))
-        target["files"] = ["versions/Dockerfile", "infra/versions.tf"]
-        self.assertFalse(classify(target, RUNTIME).auto)
-
-    def test_minor_is_human(self):
-        target = self.change(0, message=message(dep("node", update="minor", group="minor")))
-        target["files"] = ["versions/Dockerfile", "web/.node-version"]
-        self.assertFalse(classify(target, RUNTIME).auto)
-
-    def test_extra_file_is_human(self):
-        files = ["versions/Dockerfile", ".python-version", ".github/workflows/ci.yml"]
-        self.assertFalse(classify(runtime_pr(files=files), RUNTIME).auto)
-
-    def test_file_of_another_runtime_is_human(self):
-        files = ["versions/Dockerfile", ".python-version", "web/.node-version"]
-        self.assertFalse(classify(runtime_pr(files=files), RUNTIME).auto)
-
-    def test_second_commit_by_human_is_human(self):
-        self.assertFalse(classify(self.change(1, author="mallory"), RUNTIME).auto)
-
-    def test_second_commit_unsigned_is_human(self):
-        self.assertFalse(classify(self.change(1, signed_by_github=False), RUNTIME).auto)
-
-    def test_head_pushed_by_human_is_human(self):
-        self.assertFalse(classify(runtime_pr(head_pushers=["mallory"]), RUNTIME).auto)
-        self.assertFalse(classify(runtime_pr(head_pushers=["sync-app[bot]", "mallory"]), RUNTIME).auto)
-
-    def test_first_commit_forged_is_human(self):
-        self.assertFalse(classify(self.change(0, signed_by_github=False), RUNTIME).auto)
-        self.assertFalse(classify(self.change(0, pushers=["mallory"]), RUNTIME).auto)
-
-    def test_security_update_is_human(self):
-        target = self.change(0, message=message(dep("python", group=None)))
-        self.assertFalse(classify(target, RUNTIME).auto)
-
-    def test_before_sync_the_pr_is_human(self):
+    def test_patch_before_sync_is_human(self):
         target = runtime_pr()
         target["commits"] = target["commits"][:1]
         target["files"] = ["versions/Dockerfile"]
         target["head_pushers"] = ["dependabot[bot]"]
-        self.assertFalse(classify(target, RUNTIME).auto)
-
-    def test_lockfile_patch_still_works_when_enabled(self):
-        self.assertTrue(classify(pr(), RUNTIME).auto)
+        self.assertFalse(classify(target, POLICY).auto)
 
 
 def security_message(*changes: tuple[str, str, str], kind="direct:production") -> str:

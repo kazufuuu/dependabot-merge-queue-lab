@@ -72,7 +72,7 @@ def main() -> int:
     if team_id is None:
         print(f"team {policy['review_team']} が見つかりません", file=sys.stderr)
         return 1
-    app = policy["sync_app"].removesuffix("[bot]")
+    app = policy["app"]
     app_id = gh_id(f"apps/{app}")
     if app_id is None:
         # App を作る前でも、保護は先に入れる。作ったあとで、もう一度動かす。
