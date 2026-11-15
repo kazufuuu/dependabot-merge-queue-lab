@@ -268,7 +268,7 @@ Python、Node、Terraform の正本は、Dependabot が書き換えられませ�
 | Terraform | patch、minor、major の全部 | なし |
 
 Node を patch だけに絞らないのは、Node の版の出し方のためです。Node は、セキュリティの修正も含めて、いちばん新しい minor にしか版を出しません。24.20.0 に 24.20.1 は出ません。patch だけに絞ると、何も届かなくなります。
-本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。版を写すコミットが足されているので、`@dependabot rebase` は断られます。
+本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。反応が無いこともあります（[手引き](docs/manual.md)の「調べ方」）。版を写すコミットが足されているので、`@dependabot rebase` は断られます。
 見張り役の `FROM` の間には、行を挟んでいます。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突するためです。
 
 `version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。
