@@ -1,9 +1,6 @@
 {
   "review_team": "reviewers",
   "review_count": 1,
-  "reviewers": [
-    "kazufusa"
-  ],
   "required_check": "all-green",
   "ci_workflow": "ci.yml",
   "lockfiles": [

@@ -5,7 +5,6 @@ from dependabot_merge import (
     LABEL_HUMAN,
     Policy,
     classify,
-    fallback_reviewers,
     normalize,
     parse_updated_dependencies,
     plan_for,
@@ -14,7 +13,6 @@ from dependabot_merge import (
 POLICY = Policy(
     review_team="reviewers",
     review_count=1,
-    reviewers=("alice", "bob", "carol"),
     required_check="all-green",
     ci_workflow="ci.yml",
     lockfiles=("uv.lock", "package-lock.json", ".terraform.lock.hcl"),
@@ -61,8 +59,6 @@ def pr(**overrides) -> dict:
         ],
         "files": ["web/package-lock.json"],
         "files_truncated": False,
-        "requested_reviewers": [],
-        "human_reviewers": [],
         "approved_commits": [],
         "check": "success",
         "in_merge_queue": False,
@@ -277,28 +273,11 @@ class RuntimePatchTest(unittest.TestCase):
         self.assertTrue(classify(pr(), RUNTIME).auto)
 
 
-class ReviewerTest(unittest.TestCase):
-    def test_owned_files_already_requested_by_codeowners_are_not_requested_again(self):
-        target = with_deps(dep(update="minor", group="minor"), requested_reviewers=["team:reviewers"])
-        self.assertFalse(plan_for(target, POLICY).request_review)
-
-    def test_fallback_rotates_by_pr_number(self):
-        picked = [fallback_reviewers(number, POLICY)[0] for number in range(1, 7)]
-        self.assertEqual(picked, ["bob", "carol", "alice", "bob", "carol", "alice"])
-
-    def test_fallback_count_is_configurable(self):
-        two = Policy(**{**POLICY.__dict__, "review_count": 2})
-        self.assertEqual(fallback_reviewers(1, two), ["bob", "carol"])
-        many = Policy(**{**POLICY.__dict__, "review_count": 9})
-        self.assertEqual(len(fallback_reviewers(1, many)), 3)
-
-
 class PlanTest(unittest.TestCase):
     def test_auto_with_green_check_is_approved_labeled_and_enqueued(self):
         plan = plan_for(pr(), POLICY)
         self.assertTrue(plan.approve and plan.enqueue)
         self.assertEqual(plan.add_labels, [LABEL_AUTO])
-        self.assertFalse(plan.request_review)
 
     def test_auto_with_pending_check_waits(self):
         self.assertTrue(plan_for(pr(check="pending"), POLICY).is_noop())
@@ -307,7 +286,6 @@ class PlanTest(unittest.TestCase):
         plan = plan_for(pr(check="failure"), POLICY)
         self.assertFalse(plan.approve or plan.enqueue)
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
-        self.assertTrue(plan.request_review)
         self.assertIn("必須の検査が落ちました", plan.comment)
 
     def test_queued_pr_is_left_alone(self):
@@ -319,32 +297,24 @@ class PlanTest(unittest.TestCase):
         self.assertFalse(plan.approve or plan.enqueue)
         self.assertEqual(plan.remove_labels, [LABEL_AUTO])
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
-        self.assertTrue(plan.request_review)
 
     def test_removed_pr_is_not_requeued_on_later_runs(self):
-        target = pr(labels=[LABEL_HUMAN], approved_commits=["aaa"], requested_reviewers=["alice"])
+        target = pr(labels=[LABEL_HUMAN], approved_commits=["aaa"])
         self.assertTrue(plan_for(target, POLICY).is_noop())
 
     def test_new_head_after_rebase_starts_over(self):
-        target = pr(head="bbb", labels=[LABEL_HUMAN], approved_commits=["aaa"], requested_reviewers=["alice"])
+        target = pr(head="bbb", labels=[LABEL_HUMAN], approved_commits=["aaa"])
         plan = plan_for(target, POLICY)
         self.assertTrue(plan.approve and plan.enqueue)
         self.assertEqual(plan.remove_labels, [LABEL_HUMAN])
 
-    def test_human_pr_gets_reviewer_label_and_comment_once(self):
+    def test_human_pr_gets_label_and_comment_once(self):
         target = with_deps(dep(update="minor", group="minor"))
         plan = plan_for(target, POLICY)
-        self.assertTrue(plan.request_review)
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
         self.assertIsNotNone(plan.comment)
-        again = with_deps(
-            dep(update="minor", group="minor"), labels=[LABEL_HUMAN], requested_reviewers=["alice"]
-        )
+        again = with_deps(dep(update="minor", group="minor"), labels=[LABEL_HUMAN])
         self.assertTrue(plan_for(again, POLICY).is_noop())
-
-    def test_reviewer_who_already_reviewed_is_not_asked_again(self):
-        target = with_deps(dep(update="minor", group="minor"), labels=[LABEL_HUMAN], human_reviewers=["alice"])
-        self.assertTrue(plan_for(target, POLICY).is_noop())
 
     def test_push_by_human_cancels_reserved_merge(self):
         commit = {"message": message(dep()), "author": "mallory", "signed_by_github": False}
