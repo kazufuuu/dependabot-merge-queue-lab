@@ -24,24 +24,44 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | 検査 | PR ごとに自動で動くテストと、本番のイメージの組み立て。結果は `all-green` の 1 つにまとまる |
 | マージキュー | 承認済みの PR を、最新の main と合わせて検査し直してから入れる、GitHub の待ち行列 |
 | 待つ期間 | 公開から 7 日たつまで、その版を取り込まない決まり。セキュリティの修正には置かない |
-| 版の正本 | 道具の版を 1 か所に書いたファイル（`.python-version`、`.tool-versions`、`infra/versions.tf`） |
-| 見張り役 | `versions/Dockerfile`。Dependabot に道具の新しい版を見つけさせるためのファイル。組み立てには使わない |
+| 版の正本 | Python、Node、Terraform の本体の版を書いたファイル（`.python-version`、`.tool-versions`、`infra/versions.tf`）。版を確かめるときも、変えるときも、ここを見る |
+| 見張り役 | `versions/Dockerfile`。Dependabot に新しい版を見つけさせるためだけのファイル。版を管理する場所ではない。中身は、機械が正本に揃える |
 | GitHub App（App） | この仕組み専用の、機械のアカウントにあたるもの。条件を満たした PR を承認して、マージキューに入れる。人のアカウントではない |
 | 所有者、team | `.github/CODEOWNERS` に書いた、ファイルの責任者。このリポジトリでは、1 つの team（GitHub 上のメンバーの集まり）が、すべてのファイルの所有者になっている |
 
 ## メンバーの手引き
 
+### 版の置き場所
+
+版を確かめるときと、変えるときに見るファイルは、次のとおりです。
+
+| 対象 | 版を書くファイル | 実際の版が決まるファイル |
+|---|---|---|
+| Python の本体 | `.python-version`（例: `3.13.16`） | 同じ。patch まで書く |
+| Node の本体 | `.tool-versions` の `nodejs` の行（例: `nodejs 24.20.0`） | 同じ。patch まで書く |
+| Terraform の本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | 同じ。patch まで書く |
+| uv | 直下の `pyproject.toml` の開発用の依存（範囲。例: `uv>=0.13,<0.14`） | `uv.lock` |
+| Python のライブラリ | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の依存（範囲） | `uv.lock`、`api/uv.lock` |
+| npm のライブラリ | `web/package.json`（範囲） | `web/package-lock.json` |
+| Terraform のプロバイダ | `infra/versions.tf` の `required_providers`（範囲） | `infra/.terraform.lock.hcl` |
+| GitHub Actions | `.github/workflows/*.yml` の `uses:`（完全なタグ。例: `actions/checkout@v6.0.3`） | `.github/workflows/actions.lock` |
+
+手元、CI、本番のイメージは、どれもこの表のファイルから版を読みます。
+
+`versions/Dockerfile` にも Python、Node、Terraform の版が並んでいますが、版を管理する場所ではありません。Dependabot に新しい版を見つけさせるためのファイルで、中身は機械が上の表のファイルに揃えます。
+版を確かめるときも、書き換えるときも、このファイルではなく、上の表のファイルを見てください。
+
 ### 自動で起きること
 
-| 更新 | 起きること | メンバーがすること |
-|---|---|---|
-| ライブラリの patch で、ロックファイルだけが変わる | テストが通ると、`automerge` ラベルが付き、2〜3 分で main に入る | 何もしない |
-| ライブラリの patch で、テストが落ちた | `needs-review` ラベルと理由のコメントが付く | レビューする |
-| ライブラリの minor、major | `needs-review` ラベルが付く | レビューする |
-| Python、Node、Terraform の本体 | 版を正本に写すコミットが自動で足され、`needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
-| uv | ライブラリと同じ。patch は自動で入り、minor は `needs-review` が付く | ライブラリと同じ |
-| GitHub Actions | 週に 1 本にまとまって出る | レビューする |
-| セキュリティの修正 | 待つ期間なしで出る。扱いは上の行と同じ | patch でテストが通れば、何もしない。それ以外はレビューする |
+| 更新 | 変わるファイル | 起きること | メンバーがすること |
+|---|---|---|---|
+| ライブラリの patch で、ロックファイルだけが変わる | ロックファイル（`uv.lock`、`api/uv.lock`、`web/package-lock.json`、`infra/.terraform.lock.hcl`） | テストが通ると、`automerge` ラベルが付き、2〜3 分で main に入る | 何もしない |
+| ライブラリの patch で、テストが落ちた | 同じ | `needs-review` ラベルと理由のコメントが付く | レビューする |
+| ライブラリの minor、major | 範囲の中ならロックファイルだけ。範囲を超えると、`pyproject.toml`、`package.json`、`infra/versions.tf` も変わる | `needs-review` ラベルが付く | レビューする |
+| Python、Node、Terraform の本体 | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
+| uv | `uv.lock`。範囲を超えると、直下の `pyproject.toml` も変わる | ライブラリと同じ。patch は自動で入り、minor は `needs-review` が付く | ライブラリと同じ |
+| GitHub Actions | `.github/workflows/*.yml` と `.github/workflows/actions.lock` | 週に 1 本にまとまって出る | レビューする |
+| セキュリティの修正 | 上の行と同じ | 待つ期間なしで出る。扱いは上の行と同じ | patch でテストが通れば、何もしない。それ以外はレビューする |
 
 届く量の目安は、次のとおりです。
 
@@ -87,13 +107,13 @@ Python の patch の PR は、uv の版に関係なく検査が動きます。CI
 
 | 変えたいもの | 手順 |
 |---|---|
-| Python、Node、Terraform の版（同じ系列の中） | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換え、`python3 automation/versions.py align` を動かす。見張り役が正本に揃う。両方をコミットする |
+| Python、Node、Terraform の版（同じ系列の中） | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれかを書き換え、`python3 automation/versions.py align` を動かす。変わったファイルを全部コミットする |
 | Python の minor や major、Node の major | 下の「Python と Node の大きい更新」の手順 |
 | uv の minor | `pyproject.toml` の開発用の依存の範囲（`uv>=0.13,<0.14`）を書き換え、`uv lock` を動かす。ふだんは Dependabot が PR を出す |
 | ライブラリの版の範囲 | `pyproject.toml` や `package.json` の範囲を書き換え、ロックファイルを作り直す（`uv lock`、`npm install --package-lock-only`）。両方をコミットする |
 | workflow が使う action | `uses:` を完全なタグ（`actions/checkout@v6.0.3`）で書き、`gh actions-lock` を動かす。workflow と `.github/workflows/actions.lock` の両方をコミットする |
 
-片方だけを変えた PR は、検査が落とします。正本と見張り役の食い違いは、`python3 automation/versions.py check` で手元でも確かめられます。
+`align` は、Dependabot 用の `versions/Dockerfile` を、書き換えた版に揃えます。動かし忘れた PR は、検査が落とします。手元では、`python3 automation/versions.py check` で確かめられます。
 `uses:` を変えて `actions.lock` を直さなかった PR は、workflow が起動しません。検査の結果が付かないので、マージできません。Actions の画面には「This run likely failed because of a workflow file issue.」と出ます（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめました）。`gh actions-lock` を動かして、ロックファイルをコミットすると直ります。
 `gh actions-lock` は、`gh` の拡張です。`gh extension install github/gh-actions-lock --pin v0.4.1` で入れます。
 

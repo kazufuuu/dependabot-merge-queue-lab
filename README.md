@@ -7,6 +7,23 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 要件の一覧は [docs/requirements.md](docs/requirements.md) にあります。
 要件ごとの達成の状況は [docs/status.md](docs/status.md) にあります。
 
+## 版の置き場所
+
+版を確かめるときと、変えるときに見るファイルは、次のとおりです。範囲と実際の版が分かれるものは、「範囲 → 実際の版」の順に書いています。
+
+| 対象 | ファイル |
+|---|---|
+| Python の本体 | `.python-version` |
+| Node の本体 | `.tool-versions` |
+| Terraform の本体 | `infra/versions.tf` の `required_version` |
+| uv | 直下の `pyproject.toml` → `uv.lock` |
+| Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
+| npm のライブラリ | `web/package.json` → `web/package-lock.json` |
+| Terraform のプロバイダ | `infra/versions.tf` の `required_providers` → `infra/.terraform.lock.hcl` |
+| GitHub Actions | `.github/workflows/*.yml` の `uses:` → `.github/workflows/actions.lock` |
+
+`versions/Dockerfile` は、版を管理する場所ではありません。Dependabot に新しい版を見つけさせるためのファイルで、中身は機械が上のファイルに揃えます（「版の更新の流れ」）。
+
 ## 運用の決まり
 
 | 更新 | 変わるファイル | 扱い |
@@ -14,9 +31,9 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の patch | ロックファイルだけ | 検査が通れば自動で承認し、マージキューに入れる |
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
-| Python、Node、Terraform の本体の版 | 見張り役の Dockerfile。workflow が正本の変更を積む | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
+| Python、Node、Terraform の本体の版 | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）と、見張り役の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
 | uv | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
-| Python と Node の、セキュリティの修正を含む版 | 見張り役の Dockerfile と正本 | 待つ期間なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
+| Python と Node の、セキュリティの修正を含む版 | 正本と、見張り役の `versions/Dockerfile` | 待つ期間なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定した版（Actions の `uses:`、`==` で書いた依存） | 版を書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティ更新 | 更新による | 待つ期間なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、検査が通れば自動でマージする |
 | 検査が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する。所有者の承認が要る |
