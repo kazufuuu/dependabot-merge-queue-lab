@@ -1,0 +1,74 @@
+# 人が手で打つ作業の入口。レシピの一覧は `just --list` で出る。
+# CI も同じレシピを呼ぶ（.github/workflows/ci.yml）。手元と CI で、動かすコマンドを揃えるため。
+# just の版は、直下の pyproject.toml の開発用の依存（rust-just）に範囲で書き、uv.lock が決める。
+
+# レシピの一覧を出す
+default:
+    @{{ just_executable() }} --list --unsorted
+
+# 手元の検査を全部動かす（本番のイメージの組み立ては除く）
+test: workspace api web infra automation
+
+# ワークスペース（packages/ と tests/）の lint とテスト
+workspace:
+    uv sync --locked --all-packages
+    uv run --no-sync ruff check
+    uv run --no-sync pytest
+
+# API のテスト
+[working-directory('api')]
+api:
+    uv sync --locked
+    uv run --no-sync pytest
+
+# web の型の検査とテスト
+[working-directory('web')]
+web:
+    npm ci
+    npm run typecheck
+    npm test
+
+# Terraform の書式、検証、テスト
+[working-directory('infra')]
+infra:
+    terraform fmt -check -diff
+    terraform init -backend=false -input=false -lockfile=readonly
+    terraform validate
+    terraform test
+
+# 仕組み（振り分け、版の同期）のテストと、版が揃っていることの確認
+automation:
+    python3 -m unittest discover -s automation
+    python3 automation/versions.py check
+
+# 本番の API のイメージを組み立てる（引数は docker build に渡る。例: just image -t api）
+image *args:
+    scripts/build-api.sh {{ args }}
+
+# 使っている版（Python、Node、Terraform、uv、just）を出す
+versions:
+    @python3 automation/versions.py show
+
+# .python-version、.tool-versions、infra/versions.tf を書き換えたあとに動かす。Dependabot 用のファイルを揃える
+align:
+    python3 automation/versions.py align
+    python3 automation/versions.py check
+
+# pyproject.toml の範囲を書き換えたあとに動かす。uv.lock と api/uv.lock を作り直す
+lock-python:
+    uv lock
+    uv lock --directory api
+
+# web/package.json の範囲を書き換えたあとに動かす。web/package-lock.json を作り直す
+[working-directory('web')]
+lock-web:
+    npm install --package-lock-only
+
+# workflow の uses: を書き換えたあとに動かす。.github/workflows/actions.lock を作り直す
+lock-actions:
+    gh actions-lock
+    gh actions-lock --verify
+
+# リポジトリの設定、environment、ruleset を反映する（組織の所有者が動かす。例: just apply-settings owner/repo）
+apply-settings repo:
+    settings/apply.sh {{ repo }}

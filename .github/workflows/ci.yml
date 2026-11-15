@@ -13,11 +13,13 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# テストは runner の上で直接動かす。版は正本から読む。
+# テストは runner の上で直接動かす。動かすコマンドは justfile のレシピで、手元と同じものを呼ぶ。
+# job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
+# 版は正本から読む。
 # - Python: .python-version（setup-python が読んで入れる）
 # - Node: .tool-versions（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
-# - uv: uv.lock に入っている版（automation/versions.py が読んで渡す）
+# - uv、just: uv.lock に入っている版（automation/versions.py が読んで渡す）
 # Python は setup-python が入れ、uv には取ってこさせない（UV_PYTHON_DOWNLOADS）。
 # uv は、取ってこられる Python の一覧を自分の中に持つ。古い uv は新しい Python を知らないので、
 # uv に取ってこさせると、Python の patch の更新が、uv の版のせいで落ちる。
@@ -40,9 +42,9 @@ jobs:
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
-      - run: uv sync --locked --all-packages
-      - run: uv run --no-sync ruff check
-      - run: uv run --no-sync pytest
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just workspace
 
   api:
     runs-on: ubuntu-latest
@@ -64,8 +66,10 @@ jobs:
           working-directory: api
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
-      - run: uv sync --locked
-      - run: uv run --no-sync pytest
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just api
+        working-directory: .
 
   web:
     runs-on: ubuntu-latest
@@ -75,14 +79,19 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6.0.3
+      - name: 版を正本から読む
+        id: versions
+        working-directory: .
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .tool-versions
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just web
+        working-directory: .
 
   infra:
     runs-on: ubuntu-latest
@@ -100,20 +109,23 @@ jobs:
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
-      - run: terraform fmt -check -diff
-      - run: terraform init -backend=false -input=false -lockfile=readonly
-      - run: terraform validate
-      - run: terraform test
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - run: just infra
+        working-directory: .
 
   automation:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: 振り分けと版の同期のテスト
-        run: python3 -m unittest discover -s automation -v
-      - name: 版の正本と見張り役が揃っていることを確かめる
-        run: python3 automation/versions.py check
+      - name: 版を正本から読む
+        id: versions
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - name: 振り分けと版の同期のテスト。版の正本と見張り役が揃っていることも確かめる
+        run: just automation
 
   # 本番のイメージが組み立てられることを確かめる。起動の確認とテストは、ここでは行わない。
   # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、組み立てが落ちる更新がある。
@@ -127,10 +139,15 @@ jobs:
           path: /tmp/buildcache
           key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', 'uv.lock') }}
           restore-keys: image-
+      - name: 版を正本から読む
+        id: versions
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
+      - name: just を入れる
+        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
       - name: API のイメージを正本の版で組み立てる
         run: |
           docker buildx create --name ci --use >/dev/null
-          scripts/build-api.sh --builder ci \
+          just image --builder ci \
             --cache-from type=local,src=/tmp/buildcache \
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache

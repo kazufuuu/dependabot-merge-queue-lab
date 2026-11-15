@@ -43,15 +43,17 @@ class VersionsTest(unittest.TestCase):
     def test_uv_is_read_from_the_lockfile_and_has_no_sentinel(self):
         (self.root / versions.UV_LOCK).write_text(
             '[[package]]\nname = "uvicorn"\nversion = "1.2.3"\n\n[[package]]\nname = "uv"\nversion = "0.99.1"\n'
+            '\n[[package]]\nname = "rust-just"\nversion = "1.99.2"\n'
         )
-        self.assertEqual(versions.locked_uv(self.root), "0.99.1")
+        self.assertEqual(versions.locked(self.root, "uv"), "0.99.1")
+        self.assertEqual(versions.locked(self.root, "just"), "1.99.2")
         self.assertNotIn("uv", versions.read_sources(self.root))
         self.assertNotIn("uv", versions.IMAGES)
 
     def test_lockfile_without_uv_is_an_error(self):
         (self.root / versions.UV_LOCK).write_text('[[package]]\nname = "uvicorn"\nversion = "1.2.3"\n')
         with self.assertRaises(versions.VersionError):
-            versions.locked_uv(self.root)
+            versions.locked(self.root, "uv")
 
     def test_check_reports_sentinel_ahead_of_sources(self):
         self.bump_sentinel("python", "3.13.99")

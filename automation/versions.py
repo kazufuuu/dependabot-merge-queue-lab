@@ -9,6 +9,7 @@
 uv は、ここでは正本を持たない。ライブラリと同じく、pyproject.toml の開発用の依存に範囲で書き、
 版は uv.lock が決める。CI と本番のイメージは、uv.lock の版を使う（show が uv.lock から読んで出す）。
 手元の uv は、[tool.uv] required-version の下限より新しければよい。
+just（タスクランナー）も同じ。PyPI の rust-just を開発用の依存に書き、CI は uv.lock の版を使う。
 
 1 点に固定できない場所が 2 つある。どちらも、Dependabot の uv の更新が失敗するため。
 - requires-python: Dependabot は自分の Python（別の patch）で uv lock を動かす
@@ -19,7 +20,7 @@ FROM なので、versions/Dockerfile を見張り役として置き、Dependabot
 このスクリプトの sync は、見張り役の版を正本へ写すだけを行う。新しい版は探さない。
 
 使い方:
-  versions.py show          正本の版と、uv.lock の uv の版を key=value で出す
+  versions.py show          正本の版と、uv.lock の uv と just の版を key=value で出す
   versions.py check         正本と見張り役が揃っていることを確かめる
   versions.py sync          見張り役の版を正本へ写す（Dependabot の PR に対して、workflow が動かす）
   versions.py align         正本の版を見張り役へ写す（人が正本を書き換えたあとに動かす）
@@ -83,9 +84,17 @@ def read_sources(root: Path) -> dict[str, str]:
     }
 
 
-def locked_uv(root: Path) -> str:
-    """uv.lock に入っている uv の版を返す。CI と本番のイメージが、この版を使う。"""
-    return one(rf'^name = "uv"\nversion = "({VERSION})"$', (root / UV_LOCK).read_text(), UV_LOCK).group(1)
+# uv.lock から版を読む道具。左が show で出す名前、右が PyPI のパッケージの名前。
+LOCKED = {
+    "uv": "uv",
+    "just": "rust-just",
+}
+
+
+def locked(root: Path, name: str) -> str:
+    """uv.lock に入っている道具の版を返す。CI と本番のイメージが、この版を使う。"""
+    pattern = rf'^name = "{re.escape(LOCKED[name])}"\nversion = "({VERSION})"$'
+    return one(pattern, (root / UV_LOCK).read_text(), f"{UV_LOCK} の {LOCKED[name]}").group(1)
 
 
 def read_sentinel(root: Path) -> dict[str, str]:
@@ -195,7 +204,8 @@ def main() -> int:
         if args.command == "show":
             for name, version in read_sources(args.root).items():
                 print(f"{name}={version}")
-            print(f"uv={locked_uv(args.root)}")
+            for name in LOCKED:
+                print(f"{name}={locked(args.root, name)}")
         elif args.command == "sync":
             for path in sync(args.root):
                 print(path)
