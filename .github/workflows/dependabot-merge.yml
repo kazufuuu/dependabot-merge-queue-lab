@@ -25,6 +25,7 @@ jobs:
       contents: read
       pull-requests: write
       checks: read
+      issues: write
     outputs:
       to_merge: ${{ steps.triage.outputs.to_merge }}
     steps:
@@ -37,6 +38,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           AUTOMERGE_DEV_MINOR: ${{ vars.AUTOMERGE_DEV_MINOR }}
         run: python3 automation/dependabot_merge.py triage
+      # 開いている PR が上限に達すると、新しい PR が作られなくなる。近づいたら Issue で知らせる。
+      - name: 開いている PR が上限に近いかを確かめる
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 automation/dependabot_limit.py
 
   # 自動マージの条件を満たす PR を、承認してマージキューに入れる。
   # 鍵は、main だけが使える environment に置く。ほかのブランチの workflow からは読めない。
