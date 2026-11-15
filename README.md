@@ -231,6 +231,9 @@ Dependabot は、action を上げる PR で、workflow のファイルとロッ�
 | 完全なタグ（`@v10.3.2`） | patch でも minor でも、workflow のファイルとロックファイルの両方を変える | [PR #63]({U}/pull/63)（patch）、[PR #64]({U}/pull/64)（minor） |
 | major だけのタグ（`@v6`） | major の更新だけを出す。patch と minor の更新は出ない。ロックファイルのコミットは、人が `gh actions-lock --relock` を動かすまで古いまま | [実行 43681122355]({U}/actions/runs/43681122355)（`actions/cache@v6` に更新が出なかった） |
 
+action の更新は、patch も含めて人が判断します。理由は 2 つです。ロックファイルだけが変わる PR にならないことと、workflow が鍵を扱うことです。
+その代わり、action の更新は、patch、minor、major を 1 本の PR にまとめます（`.github/dependabot.yml` の `actions` のグループ）。確認は週 1 回なので、週に 1 本ほどになります。セキュリティの修正は、待たずに別の PR で出ます。
+
 そのため、`uses:` は完全なタグで書きます。major だけのタグで書くと、更新の取りこぼしになります。
 major のタグを持たない action もあります（`astral-sh/setup-uv` に `v10` は無い）。
 
@@ -262,7 +265,7 @@ major のタグを持たない action もあります（`astral-sh/setup-uv` に
 | 対象 | 通常の更新 | セキュリティの修正 |
 |---|---|---|
 | ライブラリ（PyPI、npm） | Dependabot が、7 日待って出す | Dependabot のセキュリティ更新が、待たずに出す |
-| Python と Node の本体 | Dependabot が、7 日待って出す | `security-release` の workflow が、待たずに出す |
+| Python、Node、uv の本体 | Dependabot が、7 日待って出す | `security-release` の workflow が、待たずに出す |
 
 ライブラリのセキュリティ更新が待たずに自動で入るのは、次の全部を満たすときです。
 
@@ -273,15 +276,16 @@ major のタグを持たない action もあります（`astral-sh/setup-uv` に
 minor や major になる修正、manifest が変わる修正、検査が落ちる修正は、人に依頼します。
 
 コンテナのイメージには、Dependabot のセキュリティ更新がありません。
-そこで、`.github/workflows/security-release.yml` が 4 時間ごとに、Python と Node のセキュリティの修正を含む版を探します。
+そこで、`.github/workflows/security-release.yml` が 4 時間ごとに、Python、Node、uv のセキュリティの修正を含む版を探します。
 見つけると、見張り役と正本をその版にする PR を、App が出します。判定は `automation/security_release.py` にあります。
 
 | 対象 | 見分け方 |
 |---|---|
 | Node | [nodejs.org の版の一覧](https://nodejs.org/dist/index.json)の、版ごとの `security` の値。同じ major の中で、`true` の版のうち、いちばん新しいもの |
 | Python | 今の版に効く脆弱性を [OSV](https://osv.dev) に聞く。その修正のコミットが、新しい版で初めて入ったかを、python/cpython の履歴で確かめる。同じ minor の中で、修正が入った版のうち、いちばん新しいもの |
+| uv | 今の版に効く勧告を、[GitHub の勧告のデータベース](https://github.com/advisories)に聞く。勧告に書かれた修正の版のうち、いちばん新しいもの |
 
-- 見分けは、公開されている情報を読むだけの機械的な処理です
+- 見分けは、公開されている情報を読むだけの機械的な処理です。uv は、今の版に効く勧告が 0 件であることと、古い版（0.13.3）では修正の版（0.13.4）が返ることを、実際のデータで確かめました
 - 公式イメージが Docker Hub にまだ無い版は、見送ります。次の回に確かめ直します
 - 同じ版の PR は、2 度出しません。人が閉じた PR も、出し直しません
 - 同じ回に見つかった版は、1 本の PR にまとめます
@@ -297,11 +301,24 @@ PR が出ると、版を正本に写すコミットが機械で足され、検�
 
 ## 手元の始め方
 
-1. mise か asdf を入れ、リポジトリの直下で `mise install` を動かす。`.tool-versions` に書いた版の uv と Node が入る
-2. Python は入れなくてよい。uv が `.python-version` の版を取得する
-3. Terraform を入れる。版は `infra/versions.tf` の `required_version` に合わせる。版が違うと、terraform 自身が止まる
+使う版は、次のファイルにあります。入れ方は自由です。
 
-mise が `.tool-versions` と `.python-version` からこの版を読むことは、`mise ls --current` で確かめました。`mise install` で入れるところは試していません。
+| 道具 | 版のあるファイル | このファイルを読む道具の例 |
+|---|---|---|
+| Python | `.python-version` | uv、pyenv、mise、asdf |
+| Node と uv | `.tool-versions` | mise、asdf |
+| Terraform | `infra/versions.tf` の `required_version` | terraform 自身（版が違うと止まる） |
+
+版を管理する道具を使わない場合は、ファイルに書いてある版を、次のように入れます。
+
+- uv: すでに入っている uv で `uv self update <版>` を動かす。新しく入れるときは、公式のインストーラに版を指定する（`curl -LsSf https://astral.sh/uv/<版>/install.sh | sh`）
+- Python: 入れなくてよい。uv が `.python-version` の版を取得する
+- Node: nodejs.org から、その版を入れる
+
+手元の版が正本と違うと、テストが落ちます。道具には依りません。
+`tests/test_toolchain.py` が Python と uv を、`web/src/toolchain.test.js` が Node を、ファイルの版と比べます。
+
+確かめたのは、mise が `.tool-versions` と `.python-version` から版を読むところ（`mise ls --current`）までです。それぞれの道具で実際に入れるところは、試していません。
 
 ```sh
 uv sync --locked --all-packages && uv run ruff check && uv run pytest   # workspace
@@ -343,8 +360,8 @@ App の作成をほかの部門に頼むときの依頼書は [docs/app-request.
 ## 残る制約
 
 - ランタイムと道具の版、Actions の `uses:`、`==` で固定した依存は、patch の更新でも版を書いたファイルが変わるので、人の承認が要ります
-- uv の本体は、Docker Hub のイメージ（`astral/uv`）の版として追います。通常の更新として 7 日待って出ます。uv のセキュリティの修正を待たずに出す仕掛けは、ありません
-- 手元の版の照合は、テストを動かしたときに働きます。mise や asdf を使わずに別の版を入れた人は、テストが落ちて気づきます
+- uv の本体は、Docker Hub のイメージ（`astral/uv`）の版として追います。セキュリティの修正を含む版が出ても、イメージが Docker Hub に出るまでは PR になりません
+- 手元の版の照合は、テストを動かしたときに働きます。別の版を入れた人は、テストが落ちて気づきます
 - Dependabot は、依存ごとに最新の版だけを提案します。範囲を超える版が出ている依存では、範囲の中の patch は提案されません
 - uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります
 - 人が 1 人だけの組織では、ruleset を入れたあとに main を変える手段がありません。自分の PR を自分で承認できないためです。この検証では、main の変更のたびに ruleset を一時的に無効にしました
