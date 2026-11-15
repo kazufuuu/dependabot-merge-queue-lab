@@ -20,7 +20,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "09:05"
+      time: "09:10"
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
