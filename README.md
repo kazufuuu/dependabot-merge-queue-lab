@@ -11,17 +11,21 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 
 `.github` の下と `dependabot/` が仕組みで、ほかは見本のコードです。
 
-| 場所 | 中身 | ほかのリポジトリへ持っていくか |
+| 場所 | 中身 | 仕組みとの関係 |
 |---|---|---|
-| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
-| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
-| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 持っていく |
-| `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 持っていく |
-| `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
-| `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
-| `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード | 持っていかない |
+| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 仕組みそのもの |
+| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 仕組みそのもの |
+| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 仕組みそのもの |
+| `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 仕組みそのもの |
+| `justfile`、`docs/` | 作業の入口と文書 | 仕組みそのもの |
+| `.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock`、`api/uv.lock` | バージョンの管理場所とロックファイル。開発者が見るファイル | 見本の値だが、仕組みが決まったパスで読む。`.github/scripts/versions.py` が参照する |
+| `api/Dockerfile`、`api/build.sh` | 本番の API のイメージ | 見本の一部だが、仕組みの CI（`image` の job）が使う |
+| `tests/test_toolchain.py`、`web/src/toolchain.test.js` | 手元のバージョンの照合 | 見本の一部だが、仕組みの一部（要件 11） |
+| `packages/`、`api/`、`web/`、`infra/`、`tests/` の残り | 更新される側の、見本のコード | 見本 |
 
-`.github/scripts/` のスクリプトは、Python の標準ライブラリだけで書いてあります。App の鍵を持つ job の中で動くので、外部のパッケージを入れない形にしています。テストも、同じ理由で unittest です。
+この仕組みをほかのリポジトリへ広げることは、要件の対象外です（[requirements.md](docs/requirements.md)）。この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。仕組みは、`.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock` を決まったパスで読みます。これらを欠くと、CI が落ちます（単体テストでも、この 2 つを欠くと 21 本が失敗します）。
+
+`.github/scripts/` のスクリプトは、Python の標準ライブラリだけで書いてあります。App の鍵を持つ job の中で動くので、外部のパッケージを入れない形にしています（鍵を渡す `gh` と、署名に使う `openssl` は、runner のイメージのものを使います）。テストも、同じ理由で unittest です。
 
 ## バージョンの管理場所
 
@@ -125,9 +129,9 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 
 | 測ったもの | 数字 |
 |---|---|
-| 同時に開いている Dependabot の PR | 16 本（uv の直下 4、`/api` 3、npm 3、Terraform 1、Dependabot 用の Dockerfile 4、Actions 1） |
-| 自動でマージされた patch の PR | 3 本。Dependabot の push からマージまで、2 分 47 秒、2 分 47 秒、2 分 11 秒 |
-| CI の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの CI が 1 回加わる。バージョンの同期がコミットを積む PR は、もう 1 回 |
+| 同時に開いている Dependabot の PR | 14 本（uv の直下 3、`/api` 3、npm 3、Terraform 1、Dependabot 用の Dockerfile 3、Actions 1）。2026-11-15 の終わりの時点 |
+| 自動でマージされた PR | 2 日間で 9 本（PR #12、#15、#34、#70、#79、#85、#86、#87、#93）。依存ごとの形になってからは 5 本（#79、#85、#86、#87、#93）。Dependabot の push からマージまでは、測った 4 本で、2 分 47 秒、2 分 47 秒、2 分 11 秒、2 分 24 秒 |
+| CI の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの CI が 1 回と、main に入ったあとの CI が 1 回加わる（PR #79 では、合わせて 3 回）。バージョンの同期がコミットを積む PR は、もう 1 回 |
 | 同じロックファイルを変える PR どうしの衝突 | 起きなかった。`uv.lock` を変える PR が 4 本開いた状態で 1 本が入っても、残りは作り直されず、CI も走り直さなかった |
 
 人が見る PR の本数は、次のとおりです。
@@ -136,13 +140,13 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 |---|---|---|
 | ライブラリの minor | 7 本（vitest の群の 1 本を含む） | 依存ごとに、新しい minor が出た週に 1 本 |
 | ライブラリの major | 2 本 | 依存ごとに、新しい major が出た週に 1 本 |
-| ライブラリの patch で、人に回ったもの | 2 本（テストが落ちた phonenumbers、バージョンを固定している ruff） | テストが落ちたときと、`==` で固定した依存 |
-| Python、Node、uv、Terraform 本体 | 5 本（セキュリティアップデートの 1 本を含む） | 道具ごとに、新しいバージョンが出た週に 1 本。セキュリティアップデートは、待たずに別の 1 本 |
+| ライブラリの patch で、人に回ったもの | 1 本（テストが落ちた phonenumbers） | テストが落ちたときと、`==` で固定した依存 |
+| Python と Node のランタイム、Terraform 本体 | 3 本 | 対象ごとに、新しいバージョンが出た週に 1 本。セキュリティアップデートは、待たずに別の 1 本 |
 | GitHub Actions | 1 本 | 週に 1 本 |
 
-今開いている 17 本は、どれも本物の更新です。検証用に作った PR は、残っていません。
+今開いている 14 本は、どれも本物の更新です。検証用に作った PR は、残っていません。
 本数が多いのは、このリポジトリを古いバージョンから始め、2 日間、人が 1 本も判断していないためです。溜まっていた更新が、1 回目の確認でまとめて出ました。
-2 週目以降に、週に何本出るかは、測っていません。上限は、依存の数（ライブラリ 14、道具 4、Actions 1）です。
+2 週目以降に、週に何本出るかは、測っていません。上限は、依存の数（ライブラリ 17、ランタイムと Terraform 本体 3、Actions 1）です。
 
 種類でまとめていたときは、patch の PR はディレクトリごとに 1 本、CI も 1 回でした。依存ごとに出す形では、patch の更新がある依存の数だけ、PR と CI が増えます。
 同じロックファイルの patch が 3 本以上重なった場合は、測れていません。このリポジトリには、同時に patch の更新がある依存が、ロックファイルごとに 1 つしかありませんでした。
@@ -195,11 +199,11 @@ GitHub の受信箱では、PR 1 本が通知 1 件にまとまります。こ�
 
 | 届く相手 | 理由 | 自動でマージされる PR での数 |
 |---|---|---|
-| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 14 件。セキュリティアップデートの patch が出た週は、その本数が加わる |
+| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 17 件。セキュリティアップデートの patch が出た週は、その本数が加わる |
 | 割り振られたレビュワー | レビューの依頼（`review_requested`） | 同じ。team の中で回るので、1 人あたりは人数で割った数になる |
 
-週に最大 14 件は、設定から出した上限です。ロックファイルだけが変わりうる依存の数（uv の直下 4、`/api` 4、npm 4、Terraform 2）で、全部に patch の更新が出た週の数です。
-実測は、2 日間で 6 本（PR #12、#34、#70、#79、#85、#87）です。依存ごとの形になってからは、3 本（#79、#85、#87）です。メールの通数は確かめていません。
+週に最大 17 件は、設定から出した上限です。ロックファイルだけが変わりうる依存の数（uv の直下 7、`/api` 4、npm 4、Terraform 2）で、全部に patch の更新が出た週の数です。
+実測は、2 日間で 9 本（PR #12、#15、#34、#70、#79、#85、#86、#87、#93）です。依存ごとの形になってからは、5 本（#79、#85、#86、#87、#93）です。メールの通数は確かめていません。
 
 #### 無視するための設定
 
@@ -240,7 +244,7 @@ CI が落ちた patch も、題名の形は自動でマージされる PR と同
 | `api` | API のテスト | 同上 |
 | `web` | 型チェックとテスト | setup-node が `.node-version` を読む |
 | `infra` | Terraform の書式、検証、テスト | `.github/scripts/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
-| `automation` | 振り分けとバージョンの同期のテスト、バージョンが揃っていることの確認 | runner の Python |
+| `automation` | 振り分けとバージョンの同期のテスト、バージョンが揃っていることの確認 | テストは python3 の標準ライブラリだけで動く。just を動かすために、ほかの job と同じく setup-python と setup-uv を使う |
 | `image` | API のイメージのビルド | `api/build.sh` が `.python-version` と `uv.lock` から読み、ビルドの引数で渡す |
 
 `image` は、テストを動かしません。依存を入れてイメージをビルドするだけです。ビルドしたイメージの起動は確かめません。
@@ -338,8 +342,8 @@ Dependabot は、action を上げる PR で、workflow のファイルとロッ�
 
 | `uses:` の書き方 | Dependabot の動き | 証拠 |
 |---|---|---|
-| 完全なタグ（`@v10.3.2`） | patch でも minor でも、workflow のファイルとロックファイルの両方を変える | [PR #63]({U}/pull/63)（patch）、[PR #64]({U}/pull/64)（minor） |
-| major だけのタグ（`@v6`） | major の更新だけを出す。patch と minor の更新は出ない。ロックファイルのコミットは、人が `gh actions-lock --relock` を動かすまで古いまま | [実行 43681122355]({U}/actions/runs/43681122355)（`actions/cache@v6` に更新が出なかった） |
+| 完全なタグ（`@v10.3.2`） | patch でも minor でも、workflow のファイルとロックファイルの両方を変える | [PR #63](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/63)（patch）、[PR #64](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/64)（minor） |
+| major だけのタグ（`@v6`） | major の更新だけを出す。patch と minor の更新は出ない。ロックファイルのコミットは、人が `gh actions-lock --relock` を動かすまで古いまま | [実行 43681122355](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43681122355)（`actions/cache@v6` に更新が出なかった） |
 
 action の更新は、patch も含めて人が判断します。理由は 2 つです。ロックファイルだけが変わる PR にならないことと、workflow が鍵を扱うことです。
 その代わり、action の更新は、patch、minor、major を 1 本の PR にまとめます（`.github/dependabot.yml` の `actions` のグループ）。確認は週 1 回なので、週に 1 本ほどになります。セキュリティアップデートは、待たずに別の PR で出ます。

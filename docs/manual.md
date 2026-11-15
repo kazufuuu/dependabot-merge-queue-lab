@@ -9,15 +9,17 @@
 
 `.github` の下と `dependabot/` が仕組みで、ほかは見本のコードです。
 
-| 場所 | 中身 | ほかのリポジトリへ持っていくか |
+| 場所 | 中身 | 仕組みとの関係 |
 |---|---|---|
-| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
-| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
-| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 持っていく |
-| `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 持っていく |
-| `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
-| `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
-| `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード | 持っていかない |
+| `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 仕組みそのもの |
+| `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 仕組みそのもの |
+| `.github/repo-settings/` | GitHub のリポジトリの設定（ruleset、environment など）を、ファイルに書き留めたもの。GitHub が自動で読むわけではない。組織の所有者が `uv run just apply-settings` を動かして反映する。ふだんの開発では触らない | 仕組みそのもの |
+| `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 仕組みそのもの |
+| `justfile`、`docs/` | 作業の入口と文書 | 仕組みそのもの |
+| `.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock` | バージョンの管理場所とロックファイル。開発者が見るファイル | 見本の値だが、仕組みが決まったパスで読む |
+| `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード。ただし `api/Dockerfile` と `api/build.sh` は仕組みの CI が使い、`tests/test_toolchain.py` と `web/src/toolchain.test.js` は手元のバージョンを照合する | 見本（一部は仕組みが使う） |
+
+この仕組みをほかのリポジトリへ広げることは、要件の対象外です。この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。
 
 ## 仕組みのあらまし
 
@@ -27,7 +29,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 - ライブラリの patch の更新は、テストが通れば、人を待たずに main に入ります
 - それ以外は、レビュワーに依頼が付き、人が判断します
 
-メンバーが行うのは、依頼された PR のレビューだけです。
+ふだん、メンバーが行うのは、依頼された PR のレビューです。テストが落ちた PR を直すことや、Python と Node の大きいバージョン上げを行うこともあります（あとの節）。
 
 ## 用語
 
@@ -41,6 +43,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Dependabot 用の Dockerfile | `dependabot/Dockerfile`。Dependabot に新しいバージョンを見つけさせるためだけのファイル。バージョンを管理する場所ではない。中身は、機械が `.python-version` などに揃える |
 | GitHub App（App） | この仕組み専用の、機械のアカウントにあたるもの。条件を満たした PR を承認して、マージキューに入れる。人のアカウントではない |
 | 所有者、team | `.github/CODEOWNERS` に書いた、ファイルの責任者。このリポジトリでは、1 つの team（GitHub 上のメンバーの集まり）が、すべてのファイルの所有者になっている |
+| 組織の所有者 | GitHub の organization の owner。設定の反映（`apply-settings`）や、App の作成を行う。上の「所有者」（ファイルの責任者）とは別 |
 
 ## メンバー向け
 
@@ -77,7 +80,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 届く量の目安は、次のとおりです。
 
 - 見る PR は、依存ごとに、新しい minor や major が出た週に 1 本です。Python と Node のランタイム、Terraform 本体は、新しいバージョンが出た週に 1 本、GitHub Actions は週に 1 本です
-- 自動で入る PR は、週に最大 14 本です。ロックファイルだけが変わりうる依存の数です
+- 自動で入る PR は、週に最大 17 本です。範囲の中の patch が出うるライブラリの数です
 - 検証の初回は、溜まっていた更新がまとめて出て、見る PR が 17 本になりました。2 週目以降の本数は、測っていません
 
 ### 見る PR の探し方
@@ -96,7 +99,6 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 3. CI の結果を見る。落ちていれば、次の節へ進む
 4. 問題が無ければ、Approve して、Merge when ready を押す。マージキューが、最新の main と合わせて CI を動かし直してから入れる
 
-Python の patch の PR は、uv のバージョンに関係なく CI が動きます。CI では、Python を setup-python が入れ、uv には取ってこさせないためです。uv を上げないまま Python を 3.13.18 にして、CI が通ることを確かめました（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。
 
 マージキューの中の CI で落ちた PR は、キューから外れて、開いたままになります。自動マージの PR なら、`needs-review` ラベルが付いて人に回る作りです。この動きは、単体テストで確かめただけで、実物では起きていません。
 
@@ -121,6 +123,7 @@ Python の patch の PR は、uv のバージョンに関係なく CI が動き�
 | Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.node-version`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`dependabot/Dockerfile` |
 | Python のライブラリのバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
 | npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
+| Terraform のプロバイダのバージョンの範囲 | `infra/versions.tf` の `required_providers` | `(cd infra && terraform init -upgrade)` でロックファイルを作り直す。専用のレシピは無い | `infra/versions.tf` と `infra/.terraform.lock.hcl` |
 | workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
 
 Python の minor や major、Node の major を上げる手順は、「Python と Node の大きい更新」の節にあります。
@@ -180,7 +183,7 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 
 | レシピ | 行うこと |
 |---|---|
-| `uv run just test` | CI と同じテストを、手元で全部動かす（本番のイメージのビルドは除く） |
+| `uv run just test` | CI と同じテストを、手元で全部動かす（本番のイメージのビルドは除く）。`web` は Node、`infra` は Terraform を使うので、この 2 つを入れていないと、その job で止まる |
 | `uv run just workspace`、`uv run just api`、`uv run just web`、`uv run just infra`、`uv run just automation` | CI の job を 1 つずつ動かす。レシピの名前は、job と同じ |
 | `uv run just image -t api` | 本番の API のイメージをビルドする |
 | `uv run just versions` | 使っているバージョンを出す |
@@ -215,12 +218,6 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 古い mise（2025.2.7）は、設定なしで `.node-version` と `.python-version` を読みました（`mise ls --current` で確かめました）。
 
 
-確かめたことと、確かめていないことは、次のとおりです。
-
-- just を別に入れていない状態で、`uv sync` のあとに動かしたレシピは、`uv run just workspace`、`uv run just api`、`uv run just automation`、`uv run just versions`、`uv run just align`、`uv run just lock-python`、`uv run just lock-actions` です
-- `uv run just web`、`uv run just infra`、`uv run just image` は、CI で動くことを確かめました。手元では動かしていません
-- `uv run just lock-web`、`uv run just sync`、`uv run just apply-settings` は、動かしていません
-- Python のバージョンがずれたときにテストが落ちることは、確かめました。Node のバージョンがずれたときは、確かめていません
 
 ### 通知の減らし方
 
@@ -279,6 +276,23 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 
 `uv run just apply-settings` は、`.github/repo-settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
 
+### このリポジトリに固有の値
+
+次の値は、このリポジトリと組織に合わせてあります。別のリポジトリで使うときは、書き換えます。
+
+| 値 | 書いてある場所 |
+|---|---|
+| 組織名、リポジトリ名 | `.github/dependabot.yml` には無い。`uv run just apply-settings <owner>/<repo>` の引数で渡す。文書の中のリンクは `kazufuuu/dependabot-merge-queue-lab` |
+| team の名前（`reviewers`） | `.github/CODEOWNERS`（`* @kazufuuu/reviewers`）、`.github/scripts/policy.json` の `review_team` |
+| App の名前（`kazufuuu-dependabot-automerge`） | `.github/scripts/policy.json` の `app`。`.github/repo-settings/create-app.py` の既定は `<owner>-dependabot-automerge` |
+| 担当者（`kazufusa`） | `.github/dependabot.yml` の `assignees`（6 か所） |
+| ディレクトリの構成（`/api`、`/web`、`/infra`、`packages/*`） | `.github/dependabot.yml`、`justfile`、`.github/workflows/ci.yml`、`pyproject.toml` |
+| 対象の道具（python、node、hashicorp/terraform） | `.github/scripts/versions.py` の `IMAGES`、`.github/scripts/security_release.py` の `NAMES`、`.github/scripts/policy.json` の `image_variants`、`dependabot/Dockerfile`、`.github/dependabot.yml` の `ignore` |
+| イメージの種類（`slim`） | `.github/scripts/policy.json` の `image_variants` |
+| 確認の時刻、タイムゾーン（月曜 09:00、Asia/Tokyo） | `.github/dependabot.yml` の `schedule`。workflow の cron（`.github/workflows/*.yml`）は UTC で、別に書いてある |
+
+このリポジトリを別のリポジトリへ入れる作業そのものは、要件の対象外です。この表は、固有の値がどこにあるかを示すものです。
+
 ### 調べ方
 
 最初に、`dependabot-merge` の workflow の実行ログを見ます。PR ごとに、判定と理由が 1 行ずつ出ます。
@@ -299,7 +313,7 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 | セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。pytest の警告が直下と `api/` の 2 つにあり、直下の警告にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
 | ランタイムや Terraform 本体の PR が main と衝突した。`@dependabot rebase` が断られる | `.python-version` などのバージョンを書き換えるコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、バージョンを写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、1 時間たっても反応が無かった。理由は分かっていない） |
 | Dependabot が PR を作り直さない | Dependabot は、コメントの依頼に反応しないことがある。確認が起きても、開いている PR を「すでにある」（already exists）と扱い、作り直さないことがある。どちらも、こちらでは直せない（[PR #78](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/78) で見た） | 人が衝突を直して入れるか、閉じて次のバージョンを待つ。Dependabot の設定の `directory` を変えると、新しい PR が出直す（Dependabot 用の Dockerfile を移したときに見た。古い PR は残るので、人が閉じる）。確認を起こすには、`.github/dependabot.yml` の設定（時刻など）を変える。1 か所の時刻を変えただけで、全部の設定の確認が起きた。1 つの設定だけを起こすことは、できなかった。注意書きだけを変えた push でも、全部の設定の確認が起きたことがある |
-| Dependabot 用の Dockerfile から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を Dependabot 用の Dockerfile から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。枝は、閉じたあとに消す |
+| Dependabot 用の Dockerfile から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を Dependabot 用の Dockerfile から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。ブランチは、閉じたあとに消す |
 | main に push できない | ruleset が、PR とレビューと CI を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 
 Dependabot の実行ログは、リポジトリの Insights、Dependency graph、Dependabot から見られます。

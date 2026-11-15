@@ -36,7 +36,7 @@ class VersionsTest(unittest.TestCase):
         actual = versions.read_sources(self.root)
         self.assertEqual({name: actual[name] for name in versions.IMAGES}, versions.read_sentinel(self.root))
 
-    def test_node_is_read_from_tool_versions(self):
+    def test_node_is_read_from_node_version(self):
         (self.root / versions.NODE_VERSION_FILE).write_text("24.99.1\n")
         self.assertEqual(versions.read_sources(self.root)["node"], "24.99.1")
         self.assertEqual(len(versions.check(self.root)), 1)
