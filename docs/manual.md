@@ -58,9 +58,10 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | ライブラリの patch で、テストが落ちた | ロックファイル | `needs-review` ラベルと理由のコメントが付く | レビューする |
 | ライブラリの minor、major | 範囲の中ならロックファイルだけ。範囲を超えると、`pyproject.toml`、`package.json`、`infra/versions.tf` も変わる | `needs-review` ラベルが付く | レビューする |
 | Python と Node のランタイム、Terraform 本体 | `.python-version`、`.node-version`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
-| uv、just | `uv.lock`。範囲を超えると、直下の `pyproject.toml` も変わる | patch は、テストが通ると自動で入る。minor と major は、`needs-review` ラベルが付く | patch は何もしない。minor と major はレビューする |
 | GitHub Actions | `.github/workflows/*.yml` と `.github/workflows/actions.lock` | 週に 1 本にまとまって出る | レビューする |
 | セキュリティアップデート | 通常の更新と同じファイル | cooldown なしで出る。自動で入るか、人が判断するかの分け方は、通常の更新と同じ | ライブラリの patch でテストが通れば、何もしない。ほかはレビューする |
+
+uv も、ライブラリと同じ扱いです。patch は自動で入り、minor と major は人が判断します。
 
 届く量の目安は、次のとおりです。
 
@@ -107,7 +108,7 @@ Python の patch の PR は、uv のバージョンに関係なく CI が動き�
 | 変えたいもの | 書き換えるファイル | そのあと動かすレシピ | コミットするファイル |
 |---|---|---|---|
 | Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.node-version`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`versions/Dockerfile` |
-| Python のライブラリ、uv、just のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
+| Python のライブラリ（uv を含む）のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
 | npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
 | workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
 
