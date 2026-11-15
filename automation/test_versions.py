@@ -6,7 +6,7 @@ from pathlib import Path
 import versions
 
 REPO = Path(__file__).resolve().parent.parent
-FILES = (versions.SENTINEL, *versions.SOURCES.values(), "api/Dockerfile")
+FILES = (versions.SENTINEL, *set(versions.SOURCES.values()), "api/Dockerfile")
 
 
 class VersionsTest(unittest.TestCase):
@@ -35,11 +35,11 @@ class VersionsTest(unittest.TestCase):
         actual = versions.read_sources(self.root)
         self.assertEqual({name: actual[name] for name in versions.IMAGES}, versions.read_sentinel(self.root))
 
-    def test_uv_is_read_from_the_dev_dependency(self):
-        self.edit("pyproject.toml", f'"uv=={versions.read_sources(self.root)["uv"]}"', '"uv==0.99.1"')
-        self.assertEqual(versions.read_sources(self.root)["uv"], "0.99.1")
-        # uv は Dependabot が直接上げるので、見張り役とは比べない。
-        self.assertEqual(versions.check(self.root), [])
+    def test_node_and_uv_are_read_from_tool_versions(self):
+        (self.root / versions.TOOL_VERSIONS).write_text("nodejs 24.99.1\nuv 0.99.1\n")
+        actual = versions.read_sources(self.root)
+        self.assertEqual((actual["node"], actual["uv"]), ("24.99.1", "0.99.1"))
+        self.assertEqual(len(versions.check(self.root)), 2)
 
     def test_check_reports_sentinel_ahead_of_sources(self):
         self.bump_sentinel("python", "3.13.99")
@@ -48,17 +48,16 @@ class VersionsTest(unittest.TestCase):
         self.assertIn("python", errors[0])
 
     def test_sync_copies_every_version(self):
-        uv = versions.read_sources(self.root)["uv"]
-        for name, new in {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1"}.items():
+        for name, new in {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1", "uv": "0.99.1"}.items():
             self.bump_sentinel(name, new)
         changed = versions.sync(self.root)
         self.assertEqual(
             sorted(changed),
-            sorted([versions.PYTHON_VERSION_FILE, versions.NODE_VERSION_FILE, versions.TERRAFORM_FILE]),
+            sorted([versions.PYTHON_VERSION_FILE, versions.TOOL_VERSIONS, versions.TERRAFORM_FILE]),
         )
         self.assertEqual(
             versions.read_sources(self.root),
-            {"python": "3.13.99", "uv": uv, "node": "24.99.1", "terraform": "1.99.1"},
+            {"python": "3.13.99", "uv": "0.99.1", "node": "24.99.1", "terraform": "1.99.1"},
         )
         self.assertEqual(versions.check(self.root), [])
 
@@ -71,7 +70,7 @@ class VersionsTest(unittest.TestCase):
 
     def test_align_copies_sources_to_sentinel(self):
         (self.root / versions.PYTHON_VERSION_FILE).write_text("3.13.99\n")
-        (self.root / versions.NODE_VERSION_FILE).write_text("24.99.1\n")
+        self.edit(versions.TOOL_VERSIONS, f"nodejs {versions.read_sources(self.root)['node']}", "nodejs 24.99.1")
         self.assertEqual(len(versions.check(self.root)), 2)
         self.assertEqual(versions.align(self.root), ["python", "node"])
         self.assertEqual(versions.check(self.root), [])

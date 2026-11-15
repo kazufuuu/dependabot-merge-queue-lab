@@ -9,7 +9,6 @@ dependencies = []
 dev = [
     "pytest>=9.0,<10",
     "ruff==0.17.1",
-    "uv==0.13.5",
 ]
 
 [tool.uv]
@@ -20,7 +19,7 @@ required-version = ">=0.13"
 members = ["packages/*"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages"]
+testpaths = ["packages", "tests"]
 addopts = "--import-mode=importlib"
 
 [tool.ruff]

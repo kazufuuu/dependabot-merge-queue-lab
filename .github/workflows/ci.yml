@@ -15,8 +15,7 @@ concurrency:
 
 # テストは runner の上で直接動かす。版は正本から読む。
 # - Python: .python-version（uv が読む）
-# - uv: pyproject.toml の開発用の依存 uv==（setup-uv が uv.lock から読む）
-# - Node: web/.node-version（setup-node が読む）
+# - uv と Node: .tool-versions（uv は automation/versions.py が読んで渡す。Node は setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
 jobs:
   workspace:
@@ -24,13 +23,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: 版を正本から読む
+        id: versions
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          version-file: uv.lock
+          version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
           cache-python: true
-      - name: uv の版が正本と同じことを確かめる
-        run: test "$(uv --version | cut -d' ' -f2)" = "$(python3 automation/versions.py show | sed -n 's/^uv=//p')"
       - run: uv sync --locked --all-packages
       - run: uv run --no-sync ruff check
       - run: uv run --no-sync pytest
@@ -43,10 +43,14 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: 版を正本から読む
+        id: versions
+        working-directory: .
+        run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           working-directory: api
-          version-file: ${{ github.workspace }}/uv.lock
+          version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
           cache-python: true
       - run: uv sync --locked
@@ -62,7 +66,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: web/.node-version
+          node-version-file: .tool-versions
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci

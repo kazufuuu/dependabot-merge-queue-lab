@@ -3,17 +3,14 @@
 版の正本は、それぞれの道具が自分で読む場所に置く。
 
 - Python: .python-version（uv が読む。api/ からも、親のディレクトリのこのファイルが読まれる）
-- uv: pyproject.toml の開発用の依存 uv==（uv.lock に入り、setup-uv が uv.lock から読む）
-- Node: web/.node-version（setup-node や手元の版管理の道具が読む）
+- uv と Node: .tool-versions（手元では mise や asdf が読む。CI では setup-node と、このスクリプトが読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
-
-uv は PyPI のパッケージなので、Dependabot が直接上げる。
 
 1 点に固定できない場所が 2 つある。どちらも、Dependabot の uv の更新が失敗するため。
 - requires-python: Dependabot は自分の Python（別の patch）で uv lock を動かす
 - [tool.uv] required-version（uv.toml でも同じ）: Dependabot は自分の uv で uv lock を動かす
 
-Python、Node、Terraform の正本は、Dependabot が書き換えられない。書き換えられるのは Dockerfile の
+どの正本も、Dependabot は書き換えられない。書き換えられるのは Dockerfile の
 FROM なので、versions/Dockerfile を見張り役として置き、Dependabot にはそこを上げさせる。
 このスクリプトの sync は、見張り役の版を正本へ写すだけを行う。新しい版は探さない。
 
@@ -33,8 +30,7 @@ from pathlib import Path
 
 SENTINEL = "versions/Dockerfile"
 PYTHON_VERSION_FILE = ".python-version"
-PYPROJECT = "pyproject.toml"
-NODE_VERSION_FILE = "web/.node-version"
+TOOL_VERSIONS = ".tool-versions"
 TERRAFORM_FILE = "infra/versions.tf"
 DOCKERFILES = (SENTINEL, "api/Dockerfile")
 
@@ -43,6 +39,7 @@ IMAGES = {
     "python": "python",
     "node": "node",
     "terraform": "hashicorp/terraform",
+    "uv": "astral/uv",
 }
 
 VERSION = r"\d+\.\d+\.\d+"
@@ -62,16 +59,16 @@ def one(pattern: str, text: str, where: str) -> re.Match[str]:
 
 PATTERNS = {
     "python": rf"^({VERSION})\s*$",
-    "uv": rf'^\s*"uv==({VERSION})",?\s*$',
-    "node": rf"^({VERSION})\s*$",
+    "uv": rf"^uv ({VERSION})\s*$",
+    "node": rf"^nodejs ({VERSION})\s*$",
     "terraform": rf'^\s*required_version\s*=\s*"=\s*({VERSION})"\s*$',
 }
 
 
 SOURCES = {
     "python": PYTHON_VERSION_FILE,
-    "uv": PYPROJECT,
-    "node": NODE_VERSION_FILE,
+    "uv": TOOL_VERSIONS,
+    "node": TOOL_VERSIONS,
     "terraform": TERRAFORM_FILE,
 }
 
@@ -143,7 +140,8 @@ def sync(root: Path) -> list[str]:
         if match.group(1) == version:
             continue
         file.write_text(text[: match.start(1)] + version + text[match.end(1) :])
-        changed.append(path)
+        if path not in changed:
+            changed.append(path)
     return changed
 
 
