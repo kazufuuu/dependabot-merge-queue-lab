@@ -3,8 +3,12 @@
 版の正本は、それぞれの道具が自分で読む場所に置く。
 
 - Python: .python-version（uv が読む。api/ からも、親のディレクトリのこのファイルが読まれる）
-- uv と Node: .tool-versions（手元では mise や asdf が読む。CI では setup-node と、このスクリプトが読む）
+- Node: .tool-versions（手元では mise や asdf が読む。CI では setup-node が読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
+
+uv は、ここでは正本を持たない。ライブラリと同じく、pyproject.toml の開発用の依存に範囲で書き、
+版は uv.lock が決める。CI と本番のイメージは、uv.lock の版を使う（show が uv.lock から読んで出す）。
+手元の uv は、[tool.uv] required-version の下限より新しければよい。
 
 1 点に固定できない場所が 2 つある。どちらも、Dependabot の uv の更新が失敗するため。
 - requires-python: Dependabot は自分の Python（別の patch）で uv lock を動かす
@@ -15,7 +19,7 @@ FROM なので、versions/Dockerfile を見張り役として置き、Dependabot
 このスクリプトの sync は、見張り役の版を正本へ写すだけを行う。新しい版は探さない。
 
 使い方:
-  versions.py show          正本の版を key=value で出す
+  versions.py show          正本の版と、uv.lock の uv の版を key=value で出す
   versions.py check         正本と見張り役が揃っていることを確かめる
   versions.py sync          見張り役の版を正本へ写す（Dependabot の PR に対して、workflow が動かす）
   versions.py align         正本の版を見張り役へ写す（人が正本を書き換えたあとに動かす）
@@ -32,6 +36,7 @@ SENTINEL = "versions/Dockerfile"
 PYTHON_VERSION_FILE = ".python-version"
 TOOL_VERSIONS = ".tool-versions"
 TERRAFORM_FILE = "infra/versions.tf"
+UV_LOCK = "uv.lock"
 DOCKERFILES = (SENTINEL, "api/Dockerfile")
 
 # 見張り役の FROM に書くイメージ。段の名前が、版の名前になる。
@@ -39,7 +44,6 @@ IMAGES = {
     "python": "python",
     "node": "node",
     "terraform": "hashicorp/terraform",
-    "uv": "astral/uv",
 }
 
 VERSION = r"\d+\.\d+\.\d+"
@@ -59,7 +63,6 @@ def one(pattern: str, text: str, where: str) -> re.Match[str]:
 
 PATTERNS = {
     "python": rf"^({VERSION})\s*$",
-    "uv": rf"^uv ({VERSION})\s*$",
     "node": rf"^nodejs ({VERSION})\s*$",
     "terraform": rf'^\s*required_version\s*=\s*"=\s*({VERSION})"\s*$',
 }
@@ -67,7 +70,6 @@ PATTERNS = {
 
 SOURCES = {
     "python": PYTHON_VERSION_FILE,
-    "uv": TOOL_VERSIONS,
     "node": TOOL_VERSIONS,
     "terraform": TERRAFORM_FILE,
 }
@@ -79,6 +81,11 @@ def read_sources(root: Path) -> dict[str, str]:
         name: one(pattern, (root / SOURCES[name]).read_text(), SOURCES[name]).group(1)
         for name, pattern in PATTERNS.items()
     }
+
+
+def locked_uv(root: Path) -> str:
+    """uv.lock に入っている uv の版を返す。CI と本番のイメージが、この版を使う。"""
+    return one(rf'^name = "uv"\nversion = "({VERSION})"$', (root / UV_LOCK).read_text(), UV_LOCK).group(1)
 
 
 def read_sentinel(root: Path) -> dict[str, str]:
@@ -188,6 +195,7 @@ def main() -> int:
         if args.command == "show":
             for name, version in read_sources(args.root).items():
                 print(f"{name}={version}")
+            print(f"uv={locked_uv(args.root)}")
         elif args.command == "sync":
             for path in sync(args.root):
                 print(path)

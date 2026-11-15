@@ -35,11 +35,23 @@ class VersionsTest(unittest.TestCase):
         actual = versions.read_sources(self.root)
         self.assertEqual({name: actual[name] for name in versions.IMAGES}, versions.read_sentinel(self.root))
 
-    def test_node_and_uv_are_read_from_tool_versions(self):
-        (self.root / versions.TOOL_VERSIONS).write_text("nodejs 24.99.1\nuv 0.99.1\n")
-        actual = versions.read_sources(self.root)
-        self.assertEqual((actual["node"], actual["uv"]), ("24.99.1", "0.99.1"))
-        self.assertEqual(len(versions.check(self.root)), 2)
+    def test_node_is_read_from_tool_versions(self):
+        (self.root / versions.TOOL_VERSIONS).write_text("nodejs 24.99.1\n")
+        self.assertEqual(versions.read_sources(self.root)["node"], "24.99.1")
+        self.assertEqual(len(versions.check(self.root)), 1)
+
+    def test_uv_is_read_from_the_lockfile_and_has_no_sentinel(self):
+        (self.root / versions.UV_LOCK).write_text(
+            '[[package]]\nname = "uvicorn"\nversion = "1.2.3"\n\n[[package]]\nname = "uv"\nversion = "0.99.1"\n'
+        )
+        self.assertEqual(versions.locked_uv(self.root), "0.99.1")
+        self.assertNotIn("uv", versions.read_sources(self.root))
+        self.assertNotIn("uv", versions.IMAGES)
+
+    def test_lockfile_without_uv_is_an_error(self):
+        (self.root / versions.UV_LOCK).write_text('[[package]]\nname = "uvicorn"\nversion = "1.2.3"\n')
+        with self.assertRaises(versions.VersionError):
+            versions.locked_uv(self.root)
 
     def test_check_reports_sentinel_ahead_of_sources(self):
         self.bump_sentinel("python", "3.13.99")
@@ -48,7 +60,7 @@ class VersionsTest(unittest.TestCase):
         self.assertIn("python", errors[0])
 
     def test_sync_copies_every_version(self):
-        for name, new in {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1", "uv": "0.99.1"}.items():
+        for name, new in {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1"}.items():
             self.bump_sentinel(name, new)
         changed = versions.sync(self.root)
         self.assertEqual(
@@ -57,7 +69,7 @@ class VersionsTest(unittest.TestCase):
         )
         self.assertEqual(
             versions.read_sources(self.root),
-            {"python": "3.13.99", "uv": "0.99.1", "node": "24.99.1", "terraform": "1.99.1"},
+            {"python": "3.13.99", "node": "24.99.1", "terraform": "1.99.1"},
         )
         self.assertEqual(versions.check(self.root), [])
 

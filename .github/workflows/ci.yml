@@ -14,9 +14,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # テストは runner の上で直接動かす。版は正本から読む。
-# - Python: .python-version（uv が読む）
-# - uv と Node: .tool-versions（uv は automation/versions.py が読んで渡す。Node は setup-node が読む）
+# - Python: .python-version（setup-python が読んで入れる）
+# - Node: .tool-versions（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
+# - uv: uv.lock に入っている版（automation/versions.py が読んで渡す）
+# Python は setup-python が入れ、uv には取ってこさせない（UV_PYTHON_DOWNLOADS）。
+# uv は、取ってこられる Python の一覧を自分の中に持つ。古い uv は新しい Python を知らないので、
+# uv に取ってこさせると、Python の patch の更新が、uv の版のせいで落ちる。
+env:
+  UV_PYTHON_DOWNLOADS: never
+
 jobs:
   workspace:
     runs-on: ubuntu-latest
@@ -26,11 +33,13 @@ jobs:
       - name: 版を正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
-          cache-python: true
       - run: uv sync --locked --all-packages
       - run: uv run --no-sync ruff check
       - run: uv run --no-sync pytest
@@ -47,12 +56,14 @@ jobs:
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           working-directory: api
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
-          cache-python: true
       - run: uv sync --locked
       - run: uv run --no-sync pytest
 
@@ -114,7 +125,7 @@ jobs:
       - uses: actions/cache@v6.0.0
         with:
           path: /tmp/buildcache
-          key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', 'pyproject.toml') }}
+          key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', 'uv.lock') }}
           restore-keys: image-
       - name: API のイメージを正本の版で組み立てる
         run: |

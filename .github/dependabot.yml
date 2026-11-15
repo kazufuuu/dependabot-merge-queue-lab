@@ -77,9 +77,11 @@ updates:
     commit-message:
       prefix: deps
 
-  # ランタイムと道具の版の正本は、pyproject.toml などにある。Dependabot はそこを書き換えられない。
+  # Python、Node、Terraform の本体の版の正本は、.python-version、.tool-versions、infra/versions.tf にある。
+  # Dependabot はそこを書き換えられない。
   # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
   # 待機（cooldown）は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
+  # uv は、ここには置かない。直下の uv の設定が、ライブラリと同じく、pyproject.toml の開発用の依存として上げる。
   - package-ecosystem: docker
     directory: /versions
     # コンテナイメージには、Dependabot のセキュリティ更新が無い。ここでは通常の更新だけを、待つ期間のあとに出す。
@@ -96,11 +98,15 @@ updates:
     commit-message:
       prefix: deps
     ignore:
-      # ランタイムの minor と major は、互換性の確認が要るので、人が上げる。
+      # 互換性が変わる大きい更新は、人が時期を決めて上げる。PR を出さない。
+      # Python は patch だけを出す。minor（3.13 から 3.14）は、requires-python や依存の対応が要る。
       - dependency-name: python
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # Node は同じ major の中を出す。Node は、セキュリティの修正も含めて、いちばん新しい minor にしか出さない。
+      # patch だけに絞ると、何も届かなくなる。
       - dependency-name: node
         update-types: ["version-update:semver-major"]
+      # Terraform は、patch、minor、major のどれも出す。
 
   - package-ecosystem: github-actions
     directory: /

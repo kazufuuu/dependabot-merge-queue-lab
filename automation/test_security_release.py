@@ -1,17 +1,21 @@
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
 
+import versions
 from security_release import (
+    changed_files,
     fixed_commits,
     node_security_release,
     pull_request_body,
     python_candidates,
     python_security_release,
-    uv_security_release,
     validate_target,
 )
 from version_sync import SyncError
 
-CURRENT = {"python": "3.13.16", "node": "24.20.0", "uv": "0.13.5", "terraform": "1.16.5"}
+CURRENT = {"python": "3.13.16", "node": "24.20.0", "terraform": "1.16.5"}
 
 
 def advisory(name: str, *commits: str, repo: str = "https://github.com/python/cpython") -> dict:
@@ -76,36 +80,6 @@ class PythonTest(unittest.TestCase):
         self.assertEqual(found, ((3, 13, 17), ["PSF-1"]))
 
 
-def uv_advisory(name: str, patched: str | None, package: str = "uv", withdrawn: bool = False) -> dict:
-    return {
-        "ghsa_id": name,
-        "withdrawn_at": "2026-01-01T00:00:00Z" if withdrawn else None,
-        "vulnerabilities": [{"package": {"ecosystem": "pip", "name": package}, "first_patched_version": patched}],
-    }
-
-
-class UvTest(unittest.TestCase):
-    def test_newest_fix_is_chosen(self):
-        advisories = [uv_advisory("GHSA-aaaa", "0.13.4"), uv_advisory("GHSA-bbbb", "0.13.7")]
-        self.assertEqual(uv_security_release((0, 13, 3), advisories), ((0, 13, 7), ["GHSA-aaaa", "GHSA-bbbb"]))
-
-    def test_no_advisory_means_nothing_to_do(self):
-        self.assertIsNone(uv_security_release((0, 13, 5), []))
-
-    def test_fix_that_is_not_newer_is_ignored(self):
-        self.assertIsNone(uv_security_release((0, 13, 5), [uv_advisory("GHSA-aaaa", "0.13.4")]))
-
-    def test_advisory_without_a_fix_is_ignored(self):
-        self.assertIsNone(uv_security_release((0, 13, 5), [uv_advisory("GHSA-aaaa", None)]))
-
-    def test_withdrawn_advisory_is_ignored(self):
-        self.assertIsNone(uv_security_release((0, 13, 3), [uv_advisory("GHSA-aaaa", "0.13.4", withdrawn=True)]))
-
-    def test_other_packages_and_other_majors_are_ignored(self):
-        advisories = [uv_advisory("GHSA-aaaa", "0.13.9", package="uvicorn"), uv_advisory("GHSA-bbbb", "1.0.0")]
-        self.assertIsNone(uv_security_release((0, 13, 3), advisories))
-
-
 class TargetTest(unittest.TestCase):
     def test_newer_version_in_the_same_line_is_accepted(self):
         target = {"name": "python", "version": "3.13.18", "reasons": ["PSF-2026-42"]}
@@ -113,7 +87,7 @@ class TargetTest(unittest.TestCase):
         self.assertEqual(validate_target({"name": "node", "version": "24.22.3"}, CURRENT)[1], (24, 22, 3))
 
     def test_other_names_are_rejected(self):
-        for name in ("terraform", "ruff", "../x", None):
+        for name in ("terraform", "uv", "ruff", "../x", None):
             with self.assertRaises(SyncError):
                 validate_target({"name": name, "version": "9.9.9"}, CURRENT)
 
@@ -135,6 +109,30 @@ class TargetTest(unittest.TestCase):
     def test_body_names_the_basis(self):
         self.assertIn("PSF-2026-42", pull_request_body("python", "3.13.16", "3.13.18", ["PSF-2026-42"]))
         self.assertIn("security", pull_request_body("node", "24.20.0", "24.22.3", []))
+
+
+class ChangedFilesTest(unittest.TestCase):
+    """Python と Node は、別々の PR にする。片方の PR に、もう片方の変更が混ざらない。"""
+
+    def setUp(self):
+        repo = Path(__file__).resolve().parent.parent
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root)
+        for path in (versions.SENTINEL, *set(versions.SOURCES.values()), "api/Dockerfile"):
+            (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(repo / path, self.root / path)
+
+    def test_each_runtime_changes_only_its_own_source_and_the_sentinel(self):
+        before = {path: (self.root / path).read_text() for path in (versions.SENTINEL, *versions.SOURCES.values())}
+        python = changed_files(self.root, "python", (3, 13, 99))
+        node = changed_files(self.root, "node", (24, 99, 1))
+        self.assertEqual(sorted(python), sorted([versions.PYTHON_VERSION_FILE, versions.SENTINEL]))
+        self.assertEqual(sorted(node), sorted([versions.TOOL_VERSIONS, versions.SENTINEL]))
+        self.assertIn("python:3.13.99-slim", python[versions.SENTINEL])
+        self.assertNotIn("24.99.1", python[versions.SENTINEL])
+        self.assertNotIn("3.13.99", node[versions.SENTINEL])
+        after = {path: (self.root / path).read_text() for path in before}
+        self.assertEqual(after, before)
 
 
 if __name__ == "__main__":

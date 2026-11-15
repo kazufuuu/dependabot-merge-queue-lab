@@ -1,4 +1,4 @@
-"""Python、Node、uv のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
+"""Python と Node のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
 
 コンテナのイメージには、Dependabot のセキュリティ更新が無い。Dependabot は、公式イメージの
 新しい版を、通常の更新として、待つ期間のあとに出す。セキュリティの修正を含む版だけは、
@@ -9,12 +9,13 @@
 - Node: https://nodejs.org/dist/index.json の、版ごとの security の値
 - Python: 今の版に効く脆弱性を OSV（https://osv.dev）に聞き、その修正のコミットが
   新しい版に入っているかを、GitHub の python/cpython で確かめる
-- uv: GitHub の勧告のデータベースに、今の版に効く勧告を聞く。勧告に書かれた修正の版を使う
+
+uv は PyPI のパッケージなので、Dependabot のセキュリティ更新が届く。ここでは扱わない。
 
 2 つの段に分かれている。鍵を持つのは open だけで、open は main のファイルしか読まない。
 
   find  上げる版を決める（鍵なし）。公式イメージがまだ公開されていない版は、次の回に回す
-  open  渡された版で main のファイルを書き換え、ブランチと PR を作る（鍵あり）
+  open  渡された版ごとに、main のファイルを書き換えたブランチと PR を作る（鍵あり）。Python と Node は別の PR
 
 PR は App が出すので、自動マージの対象にならない。所有者のレビューが要る。
 """
@@ -38,11 +39,10 @@ OSV_QUERY = "https://api.osv.dev/v1/query"
 CPYTHON = "python/cpython"
 CPYTHON_URL = f"https://github.com/{CPYTHON}"
 HUB_TAG = "https://hub.docker.com/v2/repositories/{repository}/tags/{tag}"
-UV_ADVISORIES = "/advisories?ecosystem=pip&affects=uv@{version}&per_page=100"
 
 BRANCH_PREFIX = "security-release/"
 LABELS = ("dependencies", "needs-review")
-NAMES = ("python", "node", "uv")
+NAMES = ("python", "node")
 # 見張り役に -slim の付いたタグで書くイメージ。
 SLIM = ("python", "node")
 PLAIN = re.compile(r"\d+\.\d+\.\d+")
@@ -185,30 +185,6 @@ def find_node(current: Version) -> tuple[Version, list[str]] | None:
     return (version, ["nodejs.org の一覧で security が true"]) if version else None
 
 
-def uv_security_release(current: Version, advisories: list[dict]) -> tuple[Version, list[str]] | None:
-    """今の版に効く勧告の、修正の版のうち、いちばん新しいものを返す。それより古い修正も含まれる。"""
-    fixed: list[Version] = []
-    reasons: list[str] = []
-    for advisory in advisories:
-        if advisory.get("withdrawn_at"):
-            continue
-        for vulnerability in advisory.get("vulnerabilities", []):
-            package = vulnerability.get("package") or {}
-            patched = str(vulnerability.get("first_patched_version") or "")
-            if package.get("ecosystem") != "pip" or package.get("name") != "uv" or not PLAIN.fullmatch(patched):
-                continue
-            version = parse(patched)
-            if version[0] == current[0] and version > current:
-                fixed.append(version)
-                reasons.append(str(advisory.get("ghsa_id", "")))
-    return (max(fixed), sorted(set(reasons))) if fixed else None
-
-
-def find_uv(current: Version) -> tuple[Version, list[str]] | None:
-    out = gh("api", "--paginate", UV_ADVISORIES.format(version=show(current)), "--jq", ".[] | @json")
-    return uv_security_release(current, [json.loads(line) for line in out.splitlines() if line])
-
-
 def branch_part(name: str, version: Version) -> str:
     return f"{name}-{show(version)}"
 
@@ -228,7 +204,7 @@ def find(repo: str, root: Path) -> None:
     current = versions.read_sources(root)
     targets: list[dict] = []
     proposed = proposed_parts(repo)
-    for name, finder in (("python", find_python), ("node", find_node), ("uv", find_uv)):
+    for name, finder in (("python", find_python), ("node", find_node)):
         now = parse(current[name])
         found = finder(now)
         if found is None:
@@ -255,7 +231,7 @@ def validate_target(target: dict, current: dict[str, str]) -> tuple[str, Version
         raise SyncError(f"対象にしない名前です: {name}")
     version = parse(str(target.get("version")))
     now = parse(current[name])
-    # Python は同じ minor の中、Node と uv は同じ major の中だけを受け付ける。
+    # Python は同じ minor の中、Node は同じ major の中だけを受け付ける。
     same_line = version[:2] == now[:2] if name == "python" else version[0] == now[0]
     if not same_line or version <= now:
         raise SyncError(f"{name}: {show(now)} から {show(version)} へは上げません")
@@ -270,10 +246,6 @@ def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
         basis = "今の版に効く次の脆弱性の修正が、この版に入っています。\n\n" + "\n".join(
             f"- [{reason}](https://osv.dev/vulnerability/{reason})" for reason in reasons
         )
-    elif name == "uv":
-        basis = "今の版に効く次の勧告の修正が、この版に入っています。\n\n" + "\n".join(
-            f"- [{reason}](https://github.com/advisories/{reason})" for reason in reasons
-        )
     else:
         basis = f"[Node.js の版の一覧]({NODE_INDEX})で、この版の `security` が `true` です。"
     return (
@@ -283,34 +255,39 @@ def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
     )
 
 
-def open_pull_request(repo: str, root: Path, targets: list[dict]) -> None:
-    """渡された版をまとめて、1 本の PR にする。同じファイルを変えるので、分けると衝突する。"""
+def changed_files(root: Path, name: str, version: Version) -> dict[str, str]:
+    """その版に上げたときに変わるファイルと、その中身を返す。手元のファイルは元に戻す。"""
+    touched = [versions.SOURCES[name], versions.SENTINEL]
+    before = {path: (root / path).read_text() for path in touched}
+    try:
+        paths = versions.set_version(root, name, show(version))
+        errors = versions.check(root)
+        if errors:
+            raise SyncError("書き換えたあとに揃っていません: " + " / ".join(errors))
+        return {path: (root / path).read_text() for path in sorted(paths)}
+    finally:
+        for path, text in before.items():
+            (root / path).write_text(text)
+
+
+def open_pull_requests(repo: str, root: Path, targets: list[dict]) -> None:
+    """渡された版ごとに、1 本ずつ PR を出す。どれも main から枝を切る。"""
     current = versions.read_sources(root)
     changes = [validate_target(target, current) for target in targets]
     if not changes or len({name for name, _, _ in changes}) != len(changes):
         raise SyncError("渡された版の組が正しくありません")
-    paths: set[str] = set()
-    for name, version, _ in changes:
-        paths.update(versions.set_version(root, name, show(version)))
-    errors = versions.check(root)
-    if errors:
-        raise SyncError("書き換えたあとに揃っていません: " + " / ".join(errors))
-    files = {path: (root / path).read_text() for path in sorted(paths)}
     base = gh("api", f"repos/{repo}/git/ref/heads/main", "--jq", ".object.sha").strip()
-
-    bumps = [f"{name} from {current[name]} to {show(version)}" for name, version, _ in changes]
-    title = f"deps: bump {' and '.join(bumps)}（セキュリティの修正）"
-    body = "\n\n".join(
-        pull_request_body(name, current[name], show(version), reasons) for name, version, reasons in changes
-    )
-    branch = BRANCH_PREFIX + "_".join(branch_part(name, version) for name, version, _ in changes)
-
     token = app_token(repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"])
-    commit = create_commit(repo, token, base, files, title)
-    app_api(repo, token, "git/refs", {"ref": f"refs/heads/{branch}", "sha": commit})
-    created = app_api(repo, token, "pulls", {"title": title, "head": branch, "base": "main", "body": body})
-    app_api(repo, token, f"issues/{created['number']}/labels", {"labels": list(LABELS)})
-    print(f"#{created['number']} を出しました: {title}")
+    for name, version, reasons in changes:
+        files = changed_files(root, name, version)
+        title = f"deps: bump {name} from {current[name]} to {show(version)}（セキュリティの修正）"
+        body = pull_request_body(name, current[name], show(version), reasons)
+        branch = BRANCH_PREFIX + branch_part(name, version)
+        commit = create_commit(repo, token, base, files, title)
+        app_api(repo, token, "git/refs", {"ref": f"refs/heads/{branch}", "sha": commit})
+        created = app_api(repo, token, "pulls", {"title": title, "head": branch, "base": "main", "body": body})
+        app_api(repo, token, f"issues/{created['number']}/labels", {"labels": list(LABELS)})
+        print(f"#{created['number']} を出しました: {title}")
 
 
 def main() -> int:
@@ -321,7 +298,7 @@ def main() -> int:
         if mode == "find":
             find(repo, root)
         elif mode == "open":
-            open_pull_request(repo, root, decode(os.environ["PAYLOAD"])["targets"])
+            open_pull_requests(repo, root, decode(os.environ["PAYLOAD"])["targets"])
         else:
             print("usage: security_release.py [find|open]")
             return 2

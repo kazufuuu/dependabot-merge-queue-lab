@@ -1,4 +1,4 @@
-# 版はビルドの引数で受け取る。正本は pyproject.toml にある。
+# 版はビルドの引数で受け取る。Python は .python-version、uv は直下の uv.lock の版を使う。
 # 引数を付け忘れると、FROM が成り立たずに失敗する。scripts/build-api.sh が正本から渡す。
 ARG PYTHON_VERSION
 ARG UV_VERSION
