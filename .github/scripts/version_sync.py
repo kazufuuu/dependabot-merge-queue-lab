@@ -29,6 +29,8 @@ WORKTREE = Path("pr")
 
 # 積んでよいファイル。これ以外が変わっていたら、何もせずに失敗させる。
 ALLOWED = frozenset(versions.SOURCES[name] for name in versions.IMAGES)
+FAIL_MARKER = "バージョンの同期に失敗しました"
+
 COMMIT_MESSAGE = (
     "バージョンの管理場所を dependabot/Dockerfile に合わせる\n\n"
     "Dependabot が上げた Dependabot 用の Dockerfile のバージョンを、.python-version などへ写した。"
@@ -79,22 +81,31 @@ def write_output(**values: str) -> None:
         output.writelines(f"{key}={value}\n" for key, value in values.items())
 
 
+def reset_worktree() -> None:
+    """前の試行の worktree を片づける。"""
+    subprocess.run(["git", "worktree", "remove", "--force", str(WORKTREE)], check=False, capture_output=True)
+
+
 def prepare(repo: str) -> None:
+    # 候補を順に見る。1 本目が失敗しても、ほかの PR を止めない。
     candidates = [pr for pr in fetch_pull_requests(repo, load_policy()) if is_candidate(pr)]
-    if not candidates:
-        print("Dependabot 用の Dockerfile だけを変える Dependabot の PR はありません")
-        write_output(number="")
-        return
-    pr = candidates[0]
-    subprocess.run(["git", "fetch", "--quiet", "--depth", "1", "origin", pr["head"]], check=True)
-    subprocess.run(["git", "worktree", "add", "--quiet", "--detach", str(WORKTREE), pr["head"]], check=True)
-    try:
-        changed = versions.sync(WORKTREE)
-    except versions.VersionError as error:
-        report_failure(repo, str(pr["number"]), error)
-        raise
-    print(f"#{pr['number']}: .python-version などへ写したファイル: {changed or 'なし'}")
-    write_output(number=str(pr["number"]) if changed else "", head=pr["head"])
+    for pr in candidates:
+        subprocess.run(["git", "fetch", "--quiet", "--depth", "1", "origin", pr["head"]], check=True)
+        reset_worktree()
+        subprocess.run(["git", "worktree", "add", "--quiet", "--detach", str(WORKTREE), pr["head"]], check=True)
+        try:
+            changed = versions.sync(WORKTREE)
+        except versions.VersionError as error:
+            report_failure(repo, str(pr["number"]), error)
+            reset_worktree()
+            continue
+        if changed:
+            print(f"#{pr['number']}: .python-version などへ写したファイル: {changed}")
+            write_output(number=str(pr["number"]), head=pr["head"])
+            return
+        reset_worktree()
+    print("写す対象の PR はありません")
+    write_output(number="")
 
 
 def collect(number: str, head: str) -> None:
@@ -164,6 +175,10 @@ def report_failure(repo: str, number: str, error: Exception) -> None:
         "スクリプトがバージョンの記述を見つけられない場合は、理由に出ているファイルを確かめてください"
     )
     try:
+        last = gh("api", f"repos/{repo}/issues/{number}/comments", "--jq", "(.[-1].body // \"\")")
+        if last.startswith(FAIL_MARKER):
+            print(f"#{number}: 同じ失敗の知らせが既にあるので、重ねてコメントしません")
+            return
         gh("pr", "comment", number, "--repo", repo, "--body", body)
     except RuntimeError as comment_error:
         print(f"::warning::#{number} にコメントできませんでした: {comment_error}")

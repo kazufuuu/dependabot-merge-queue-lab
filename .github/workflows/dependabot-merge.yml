@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ラベル、レビュー依頼、コメントを付ける。
+  # ラベルとコメントを付ける。レビューの依頼は CODEOWNERS が付ける。
   triage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -25,6 +25,7 @@ jobs:
       contents: read
       pull-requests: write
       checks: read
+      actions: read
       issues: write
     outputs:
       to_merge: ${{ steps.triage.outputs.to_merge }}
@@ -39,7 +40,9 @@ jobs:
           AUTOMERGE_DEV_MINOR: ${{ vars.AUTOMERGE_DEV_MINOR }}
         run: python3 .github/scripts/dependabot_merge.py triage
       # 開いている PR が上限に達すると、新しい PR が作られなくなる。近づいたら Issue で知らせる。
+      # 振り分けが失敗しても、上限の確認は動かす。
       - name: 開いている PR が上限に近いかを確かめる
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/dependabot_limit.py

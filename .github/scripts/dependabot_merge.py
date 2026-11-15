@@ -18,7 +18,7 @@
 開発用の依存の minor は、設定（AUTOMERGE_DEV_MINOR）で足せる。既定では無効。
 Python と Node のランタイムの更新は、ロックファイル以外が変わるので、patch でも人が判断する。
 
-条件を満たさない PR には、レビューを依頼してラベルを付ける。
+条件を満たさない PR には、`needs-review` ラベルと理由のコメントを付ける。レビューの依頼は CODEOWNERS が付ける。
 承認とマージキューへの投入は、専用の GitHub App のトークンで行う。
 """
 
@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -262,12 +263,15 @@ def plan_for(pr: dict, policy: Policy) -> Plan:
 # ここから下は GitHub とのやり取り。
 
 QUERY = """
-query($owner: String!, $name: String!) {
+query($owner: String!, $name: String!, $after: String) {
   repository(owner: $owner, name: $name) {
-    pullRequests(states: OPEN, first: 40, orderBy: {field: CREATED_AT, direction: ASC}) {
+    pullRequests(states: OPEN, first: 50, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         number
         headRefOid
+        headRefName
+        isCrossRepository
         author { __typename login }
         labels(first: 30) { nodes { name } }
         latestReviews(first: 30) { nodes { state author { __typename login } commit { oid } } }
@@ -342,21 +346,43 @@ def normalize(node: dict, policy: Policy, pushers: dict[str, list[str]]) -> dict
     }
 
 
-def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
+def fetch_nodes(repo: str) -> list[dict]:
+    """開いている PR を、ページをたどって全部取る。40 本で切れない。"""
     owner, name = repo.split("/")
-    out = gh("api", "graphql", "-f", f"query={QUERY}", "-f", f"owner={owner}", "-f", f"name={name}")
-    nodes = json.loads(out)["data"]["repository"]["pullRequests"]["nodes"]
+    nodes: list[dict] = []
+    after = ""
+    while True:
+        args = ["api", "graphql", "-f", f"query={QUERY}", "-f", f"owner={owner}", "-f", f"name={name}"]
+        if after:
+            args += ["-f", f"after={after}"]
+        page = json.loads(gh(*args))["data"]["repository"]["pullRequests"]
+        nodes += page["nodes"]
+        if not page["pageInfo"]["hasNextPage"]:
+            return nodes
+        after = page["pageInfo"]["endCursor"]
+
+
+def fetch_pull_requests(repo: str, policy: Policy) -> list[dict]:
     pulls = []
-    for node in nodes:
+    for node in fetch_nodes(repo):
         author = node["author"]
         if not author or author["__typename"] != "Bot" or author["login"] != DEPENDABOT_AUTHOR:
             continue
+        if node["isCrossRepository"]:
+            continue  # フォークからの PR は、本体のブランチを指さないので対象にしない
+        branch = node["headRefName"]
         pushers = {}
         for commit in node["commits"]["nodes"][-2:]:
             oid = commit["commit"]["oid"]
+            # この PR 自身のブランチで、この head を起こした CI の実行だけを見る。
+            # 別の PR の同じ SHA の実行（主体が Dependabot でも）を、取り違えない。
+            jq = (
+                f'[.workflow_runs[] | select(.head_branch=="{branch}" and '
+                f'.head_repository.full_name=="{repo}") | .actor.login]'
+            )
             runs = gh(
                 "api", f"repos/{repo}/actions/workflows/{policy.ci_workflow}/runs?event=pull_request&head_sha={oid}",
-                "--jq", "[.workflow_runs[].actor.login]",
+                "--jq", jq,
             )  # fmt: skip
             pushers[oid] = json.loads(runs)
         pulls.append(normalize(node, policy, pushers))
@@ -386,14 +412,17 @@ def apply_merge(plan: Plan, pr: dict, repo: str, token: str) -> None:
     GITHUB_TOKEN でキューに入れると、merge_group の CI が起動せず、キューが止まる。
     """
     number = str(plan.number)
+    # ラベル、auto-merge、承認の順に行う。承認を最後にするのは、途中で失敗しても、
+    # 承認だけが残って「キューから外れた」と誤判定される状態を作らないため。auto-merge は
+    # 承認が付くまでマージしないので、承認の前に有効にしても、未承認のまま入ることはない。
+    gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)
+    gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"], token=token)
     gh(
         "api", "-X", "POST", f"repos/{repo}/pulls/{number}/reviews",
         "-f", "event=APPROVE", "-f", f"commit_id={pr['head']}",
         "-f", "body=patch の更新で、CI が通っています。自動で承認します。",
         token=token,
     )  # fmt: skip
-    gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)
-    gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"], token=token)
 
 
 def b64url(data: bytes) -> str:
@@ -410,10 +439,13 @@ def app_token(repo: str, app_id: str, private_key: str) -> str:
     with tempfile.NamedTemporaryFile("w", suffix=".pem") as key_file:
         key_file.write(private_key)
         key_file.flush()
-        signature = subprocess.run(
+        result = subprocess.run(
             ["openssl", "dgst", "-sha256", "-sign", key_file.name],
-            input=unsigned.encode(), capture_output=True, check=True,
-        ).stdout  # fmt: skip
+            input=unsigned.encode(), capture_output=True, check=False,
+        )  # fmt: skip
+        if result.returncode != 0:
+            raise RuntimeError("openssl で鍵の署名に失敗しました（鍵の形を確かめてください）")
+        signature = result.stdout
     jwt = f"{unsigned}.{b64url(signature)}"
 
     def call(method: str, path: str, body: dict | None = None) -> dict:
@@ -426,18 +458,21 @@ def app_token(repo: str, app_id: str, private_key: str) -> str:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.load(response)
 
-    installation = call("GET", f"/repos/{repo}/installation")
-    token = call(
-        "POST",
-        f"/app/installations/{installation['id']}/access_tokens",
-        {"repositories": [repo.split("/")[1]]},
-    )["token"]
+    try:
+        installation = call("GET", f"/repos/{repo}/installation")
+        token = call(
+            "POST",
+            f"/app/installations/{installation['id']}/access_tokens",
+            {"repositories": [repo.split("/")[1]]},
+        )["token"]
+    except (urllib.error.URLError, OSError, KeyError) as error:
+        raise RuntimeError(f"App のトークンを作れませんでした（鍵や App の状態を確かめてください）: {error}") from error
     print(f"::add-mask::{token}")
     return token
 
 
 def main() -> int:
-    """triage はラベルと依頼を付け、merge は承認とキューへの投入を行う。
+    """triage はラベルとコメントを付け、merge は承認とキューへの投入を行う。
 
     merge は、鍵を持つ別の job から呼ぶ。対象の PR は、その場で判定し直す。
     """

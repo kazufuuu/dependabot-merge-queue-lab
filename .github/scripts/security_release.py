@@ -204,7 +204,11 @@ def find(repo: str, root: Path) -> None:
     proposed = proposed_parts(repo)
     for name, finder in (("python", find_python), ("node", find_node)):
         now = parse(current[name])
-        found = finder(now)
+        try:
+            found = finder(now)
+        except (urllib.error.URLError, OSError, ValueError, KeyError, RuntimeError) as error:
+            print(f"::warning::{name}: 確かめられませんでした（次の回に試します）: {error}")
+            continue
         if found is None:
             print(f"{name}: {show(now)} より新しい、セキュリティアップデートはありません")
             continue
@@ -281,8 +285,18 @@ def open_pull_requests(repo: str, root: Path, targets: list[dict]) -> None:
         title = f"deps: bump {name} from {current[name]} to {show(version)}（セキュリティアップデート）"
         body = pull_request_body(name, current[name], show(version), reasons)
         branch = BRANCH_PREFIX + branch_part(name, version)
+        # すでにその枝の PR が開いているなら、二重に出さない。
+        existing = gh("api", f"repos/{repo}/pulls?head={repo.split('/')[0]}:{branch}&state=open", "--jq", "length")
+        if existing.strip() != "0":
+            print(f"{name}: {branch} の PR は、すでに開いています")
+            continue
         commit = create_commit(repo, token, base, files, title)
-        app_api(repo, token, "git/refs", {"ref": f"refs/heads/{branch}", "sha": commit})
+        # 枝を作る。前の回に枝だけ残っていたら、その枝を今のコミットに向け直す（PR 作成の失敗で孤立しないように）。
+        ref = f"heads/{branch}"
+        if gh("api", f"repos/{repo}/git/ref/{ref}", "--jq", ".ref // \"\"").strip():
+            app_api(repo, token, f"git/refs/{ref}", {"sha": commit, "force": True}, method="PATCH")
+        else:
+            app_api(repo, token, "git/refs", {"ref": f"refs/{ref}", "sha": commit})
         created = app_api(repo, token, "pulls", {"title": title, "head": branch, "base": "main", "body": body})
         app_api(repo, token, f"issues/{created['number']}/labels", {"labels": list(LABELS)})
         print(f"#{created['number']} を出しました: {title}")

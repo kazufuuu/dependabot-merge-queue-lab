@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
       - name: Dependabot の PR を数える
+        shell: bash  # pipefail を効かせ、python が失敗したら step も失敗させる（tee が 0 を返すため）
         env:
           GH_TOKEN: ${{ github.token }}
           DAYS: ${{ inputs.days || '7' }}
