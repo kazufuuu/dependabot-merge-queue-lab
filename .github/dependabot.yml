@@ -94,7 +94,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: "09:01"
+      time: "09:00"
       timezone: Asia/Tokyo
     cooldown:
       default-days: 7
@@ -155,10 +155,9 @@ updates:
     assignees: [kazufusa]
     commit-message:
       prefix: deps
+    # action の更新は、patch、minor、major を 1 本の PR にまとめる。人が判断する。
+    # action を上げると、workflow のファイルとロックファイルの両方が変わるので、自動マージの対象にしない。
     groups:
-      patch:
+      actions:
         applies-to: version-updates
-        update-types: [patch]
-      minor:
-        applies-to: version-updates
-        update-types: [minor]
+        patterns: ["*"]
