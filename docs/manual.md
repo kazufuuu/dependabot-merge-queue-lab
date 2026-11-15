@@ -156,6 +156,16 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 最初に、リポジトリの直下で `uv sync` を動かします。開発用の依存（pytest、ruff、just）が入ります。
 作業は、`uv run just <レシピ>` で動かします。レシピは直下の `justfile` にあり、`uv run just --list` で、一覧と説明が出ます。CI も、同じレシピを呼びます。
 
+`uv run just` が動く仕組みは、次のとおりです。
+
+| 場面 | 起きること |
+|---|---|
+| `uv sync` を打つ | just は、直下の `pyproject.toml` の開発用の依存です（PyPI の `rust-just`）。ruff や pytest と同じ扱いです。`uv.lock` に書いてあるバージョンの just が、リポジトリの中の環境（`.venv`）に入ります。Python も、uv が `.python-version` のバージョンを用意します。手元に just を別に入れる必要はありません |
+| `uv run just <レシピ>` を打つ | `.venv` に入った just が動きます |
+| Dependabot の更新で `uv.lock` が変わった | 何もしなくて構いません。`uv run` は、`uv.lock` と `.venv` を見比べ、違っていれば入れ直してから動かします。`.venv` に古い just（1.58.0）を入れた状態で `uv run just --version` を打ち、1.59.0 に入れ直されることを確かめました |
+| CI が動く | CI も、同じ `uv run --locked just <レシピ>` を呼びます。just のバージョンも、動くコマンドも、手元と同じです。CI は、毎回まっさらなマシンに Python と uv を入れるので、準備に job あたり数秒かかります。手元では、1 度入れれば残るので、この時間はかかりません |
+| 自分で入れた just を使う | `just <レシピ>` でも動きます。just のバージョンは、自分で入れたものになります |
+
 | レシピ | 行うこと |
 |---|---|
 | `uv run just test` | CI と同じテストを、手元で全部動かす（本番のイメージのビルドは除く） |
@@ -192,7 +202,6 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 
 古い mise（2025.2.7）は、設定なしで `.node-version` と `.python-version` を読みました（`mise ls --current` で確かめました）。
 
-just は、ruff や pytest と同じ開発用の依存です。`uv run` で動かすと、`uv.lock` のバージョンになり、CI と揃います。自分で入れた just で `just <レシピ>` と打っても動きます。
 
 確かめたことと、確かめていないことは、次のとおりです。
 
