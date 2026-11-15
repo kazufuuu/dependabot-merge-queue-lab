@@ -1,4 +1,4 @@
-"""Python と Node のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
+"""Python、Node、uv のセキュリティの修正を含む版を見つけ、待たずに PR を出す。
 
 コンテナのイメージには、Dependabot のセキュリティ更新が無い。Dependabot は、公式イメージの
 新しい版を、通常の更新として、待つ期間のあとに出す。セキュリティの修正を含む版だけは、
@@ -9,6 +9,7 @@
 - Node: https://nodejs.org/dist/index.json の、版ごとの security の値
 - Python: 今の版に効く脆弱性を OSV（https://osv.dev）に聞き、その修正のコミットが
   新しい版に入っているかを、GitHub の python/cpython で確かめる
+- uv: GitHub の勧告のデータベースに、今の版に効く勧告を聞く。勧告に書かれた修正の版を使う
 
 2 つの段に分かれている。鍵を持つのは open だけで、open は main のファイルしか読まない。
 
@@ -36,11 +37,14 @@ NODE_INDEX = "https://nodejs.org/dist/index.json"
 OSV_QUERY = "https://api.osv.dev/v1/query"
 CPYTHON = "python/cpython"
 CPYTHON_URL = f"https://github.com/{CPYTHON}"
-HUB_TAG = "https://hub.docker.com/v2/repositories/library/{image}/tags/{version}-slim"
+HUB_TAG = "https://hub.docker.com/v2/repositories/{repository}/tags/{tag}"
+UV_ADVISORIES = "/advisories?ecosystem=pip&affects=uv@{version}&per_page=100"
 
 BRANCH_PREFIX = "security-release/"
 LABELS = ("dependencies", "needs-review")
-NAMES = ("python", "node")
+NAMES = ("python", "node", "uv")
+# 見張り役に -slim の付いたタグで書くイメージ。
+SLIM = ("python", "node")
 PLAIN = re.compile(r"\d+\.\d+\.\d+")
 ADVISORY = re.compile(r"[A-Za-z0-9-]{1,40}")
 
@@ -149,10 +153,13 @@ def osv_affecting(commit: str) -> list[dict]:
             return found
 
 
-def image_published(image: str, version: Version) -> bool:
-    """Docker Hub に、その版の公式イメージがあるかを返す。"""
+def image_published(name: str, version: Version) -> bool:
+    """Docker Hub に、見張り役に書くタグのイメージがあるかを返す。"""
+    image = versions.IMAGES[name]
+    repository = image if "/" in image else f"library/{image}"
+    tag = show(version) + ("-slim" if name in SLIM else "")
     try:
-        fetch_json(HUB_TAG.format(image=image, version=show(version)))
+        fetch_json(HUB_TAG.format(repository=repository, tag=tag))
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return False
@@ -178,6 +185,30 @@ def find_node(current: Version) -> tuple[Version, list[str]] | None:
     return (version, ["nodejs.org の一覧で security が true"]) if version else None
 
 
+def uv_security_release(current: Version, advisories: list[dict]) -> tuple[Version, list[str]] | None:
+    """今の版に効く勧告の、修正の版のうち、いちばん新しいものを返す。それより古い修正も含まれる。"""
+    fixed: list[Version] = []
+    reasons: list[str] = []
+    for advisory in advisories:
+        if advisory.get("withdrawn_at"):
+            continue
+        for vulnerability in advisory.get("vulnerabilities", []):
+            package = vulnerability.get("package") or {}
+            patched = str(vulnerability.get("first_patched_version") or "")
+            if package.get("ecosystem") != "pip" or package.get("name") != "uv" or not PLAIN.fullmatch(patched):
+                continue
+            version = parse(patched)
+            if version[0] == current[0] and version > current:
+                fixed.append(version)
+                reasons.append(str(advisory.get("ghsa_id", "")))
+    return (max(fixed), sorted(set(reasons))) if fixed else None
+
+
+def find_uv(current: Version) -> tuple[Version, list[str]] | None:
+    out = gh("api", "--paginate", UV_ADVISORIES.format(version=show(current)), "--jq", ".[] | @json")
+    return uv_security_release(current, [json.loads(line) for line in out.splitlines() if line])
+
+
 def branch_part(name: str, version: Version) -> str:
     return f"{name}-{show(version)}"
 
@@ -197,7 +228,7 @@ def find(repo: str, root: Path) -> None:
     current = versions.read_sources(root)
     targets: list[dict] = []
     proposed = proposed_parts(repo)
-    for name, finder in (("python", find_python), ("node", find_node)):
+    for name, finder in (("python", find_python), ("node", find_node), ("uv", find_uv)):
         now = parse(current[name])
         found = finder(now)
         if found is None:
@@ -206,7 +237,7 @@ def find(repo: str, root: Path) -> None:
         version, reasons = found
         if branch_part(name, version) in proposed:
             print(f"{name}: {show(version)} の PR は、すでに出しています")
-        elif not image_published(versions.IMAGES[name], version):
+        elif not image_published(name, version):
             print(f"::notice::{name}: {show(version)} の公式イメージが、まだ公開されていません。次の回に確かめます")
         else:
             print(f"{name}: {show(now)} から {show(version)} へ上げる PR を出します（{', '.join(reasons)}）")
@@ -224,11 +255,12 @@ def validate_target(target: dict, current: dict[str, str]) -> tuple[str, Version
         raise SyncError(f"対象にしない名前です: {name}")
     version = parse(str(target.get("version")))
     now = parse(current[name])
+    # Python は同じ minor の中、Node と uv は同じ major の中だけを受け付ける。
     same_line = version[:2] == now[:2] if name == "python" else version[0] == now[0]
     if not same_line or version <= now:
         raise SyncError(f"{name}: {show(now)} から {show(version)} へは上げません")
     reasons = [str(reason) for reason in target.get("reasons", [])]
-    if name == "python" and not all(ADVISORY.fullmatch(reason) for reason in reasons):
+    if name != "node" and not all(ADVISORY.fullmatch(reason) for reason in reasons):
         raise SyncError("勧告の番号の形が違います")
     return name, version, reasons
 
@@ -237,6 +269,10 @@ def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
     if name == "python":
         basis = "今の版に効く次の脆弱性の修正が、この版に入っています。\n\n" + "\n".join(
             f"- [{reason}](https://osv.dev/vulnerability/{reason})" for reason in reasons
+        )
+    elif name == "uv":
+        basis = "今の版に効く次の勧告の修正が、この版に入っています。\n\n" + "\n".join(
+            f"- [{reason}](https://github.com/advisories/{reason})" for reason in reasons
         )
     else:
         basis = f"[Node.js の版の一覧]({NODE_INDEX})で、この版の `security` が `true` です。"

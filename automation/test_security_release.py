@@ -6,6 +6,7 @@ from security_release import (
     pull_request_body,
     python_candidates,
     python_security_release,
+    uv_security_release,
     validate_target,
 )
 from version_sync import SyncError
@@ -75,6 +76,36 @@ class PythonTest(unittest.TestCase):
         self.assertEqual(found, ((3, 13, 17), ["PSF-1"]))
 
 
+def uv_advisory(name: str, patched: str | None, package: str = "uv", withdrawn: bool = False) -> dict:
+    return {
+        "ghsa_id": name,
+        "withdrawn_at": "2026-01-01T00:00:00Z" if withdrawn else None,
+        "vulnerabilities": [{"package": {"ecosystem": "pip", "name": package}, "first_patched_version": patched}],
+    }
+
+
+class UvTest(unittest.TestCase):
+    def test_newest_fix_is_chosen(self):
+        advisories = [uv_advisory("GHSA-aaaa", "0.13.4"), uv_advisory("GHSA-bbbb", "0.13.7")]
+        self.assertEqual(uv_security_release((0, 13, 3), advisories), ((0, 13, 7), ["GHSA-aaaa", "GHSA-bbbb"]))
+
+    def test_no_advisory_means_nothing_to_do(self):
+        self.assertIsNone(uv_security_release((0, 13, 5), []))
+
+    def test_fix_that_is_not_newer_is_ignored(self):
+        self.assertIsNone(uv_security_release((0, 13, 5), [uv_advisory("GHSA-aaaa", "0.13.4")]))
+
+    def test_advisory_without_a_fix_is_ignored(self):
+        self.assertIsNone(uv_security_release((0, 13, 5), [uv_advisory("GHSA-aaaa", None)]))
+
+    def test_withdrawn_advisory_is_ignored(self):
+        self.assertIsNone(uv_security_release((0, 13, 3), [uv_advisory("GHSA-aaaa", "0.13.4", withdrawn=True)]))
+
+    def test_other_packages_and_other_majors_are_ignored(self):
+        advisories = [uv_advisory("GHSA-aaaa", "0.13.9", package="uvicorn"), uv_advisory("GHSA-bbbb", "1.0.0")]
+        self.assertIsNone(uv_security_release((0, 13, 3), advisories))
+
+
 class TargetTest(unittest.TestCase):
     def test_newer_version_in_the_same_line_is_accepted(self):
         target = {"name": "python", "version": "3.13.18", "reasons": ["PSF-2026-42"]}
@@ -82,7 +113,7 @@ class TargetTest(unittest.TestCase):
         self.assertEqual(validate_target({"name": "node", "version": "24.22.3"}, CURRENT)[1], (24, 22, 3))
 
     def test_other_names_are_rejected(self):
-        for name in ("uv", "terraform", "../x", None):
+        for name in ("terraform", "ruff", "../x", None):
             with self.assertRaises(SyncError):
                 validate_target({"name": name, "version": "9.9.9"}, CURRENT)
 
