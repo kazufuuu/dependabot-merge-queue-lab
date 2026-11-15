@@ -68,6 +68,11 @@ lock-python:
 lock-web:
     npm install --package-lock-only
 
+# infra/versions.tf の required_providers を書き換えたあとに動かす。infra/.terraform.lock.hcl を作り直す
+[working-directory('infra')]
+lock-infra:
+    terraform init -upgrade -input=false
+
 # workflow の uses: を書き換えたあとに動かす。.github/workflows/actions.lock を作り直す
 lock-actions:
     gh actions-lock

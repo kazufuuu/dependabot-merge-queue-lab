@@ -19,7 +19,7 @@
 | `.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock` | バージョンの管理場所とロックファイル。開発者が見るファイル | 見本の値だが、仕組みが決まったパスで読む |
 | `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード。ただし `api/Dockerfile` と `api/build.sh` は仕組みの CI が使い、`tests/test_toolchain.py` と `web/src/toolchain.test.js` は手元のバージョンを照合する | 見本（一部は仕組みが使う） |
 
-この仕組みをほかのリポジトリへ広げることは、要件の対象外です。この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。
+この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。
 
 ## 仕組みのあらまし
 
@@ -123,7 +123,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.node-version`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`dependabot/Dockerfile` |
 | Python のライブラリのバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
 | npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
-| Terraform のプロバイダのバージョンの範囲 | `infra/versions.tf` の `required_providers` | `(cd infra && terraform init -upgrade)` でロックファイルを作り直す。専用のレシピは無い | `infra/versions.tf` と `infra/.terraform.lock.hcl` |
+| Terraform のプロバイダのバージョンの範囲 | `infra/versions.tf` の `required_providers` | `uv run just lock-infra` | `infra/versions.tf` と `infra/.terraform.lock.hcl` |
 | workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
 
 Python の minor や major、Node の major を上げる手順は、「Python と Node の大きい更新」の節にあります。
@@ -187,7 +187,7 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 | `uv run just workspace`、`uv run just api`、`uv run just web`、`uv run just infra`、`uv run just automation` | CI の job を 1 つずつ動かす。レシピの名前は、job と同じ |
 | `uv run just image -t api` | 本番の API のイメージをビルドする |
 | `uv run just versions` | 使っているバージョンを出す |
-| `uv run just align`、`uv run just lock-python`、`uv run just lock-web`、`uv run just lock-actions` | バージョンを書き換えたあとに動かす（「バージョンを変える手順」の節） |
+| `uv run just align`、`uv run just lock-python`、`uv run just lock-web`、`uv run just lock-infra`、`uv run just lock-actions` | バージョンを書き換えたあとに動かす（「バージョンを変える手順」の節） |
 
 CI が落ちたときは、落ちた job と同じ名前のレシピを手元で動かすと、同じコマンドが動きます。
 

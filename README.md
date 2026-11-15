@@ -23,7 +23,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | `tests/test_toolchain.py`、`web/src/toolchain.test.js` | 手元のバージョンの照合 | 見本の一部だが、仕組みの一部（要件 11） |
 | `packages/`、`api/`、`web/`、`infra/`、`tests/` の残り | 更新される側の、見本のコード | 見本 |
 
-この仕組みをほかのリポジトリへ広げることは、要件の対象外です（[requirements.md](docs/requirements.md)）。この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。仕組みは、`.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock` を決まったパスで読みます。これらを欠くと、CI が落ちます（単体テストでも、この 2 つを欠くと 21 本が失敗します）。
+この仕組みをほかのリポジトリへ広げることは、要件の対象外です（[requirements.md](docs/requirements.md)）。この表は、このリポジトリの中で、どれが仕組みで、どれが見本かを分かるためのものです。仕組みは、`.python-version`、`.node-version`、`infra/versions.tf`、`uv.lock` を決まったパスで読みます。これらを欠くと、CI が落ちます（仕組みのテストを、`infra/versions.tf` と `api/Dockerfile` を欠いた状態で動かすと、21 本が失敗します）。
 
 `.github/scripts/` のスクリプトは、Python の標準ライブラリだけで書いてあります。App の鍵を持つ job の中で動くので、外部のパッケージを入れない形にしています（鍵を渡す `gh` と、署名に使う `openssl` は、runner のイメージのものを使います）。テストも、同じ理由で unittest です。
 
