@@ -24,7 +24,7 @@ def kind_of(pr: dict) -> str:
         deps = deps or parse_updated_dependencies(commit["messageBody"])
     if not deps:
         return "不明"
-    # セキュリティ更新のメタデータには、種別が書かれない。
+    # セキュリティアップデートのメタデータには、種別が書かれない。
     if any("update-type" not in dep for dep in deps):
         return "security"
     types = {dep.get("update-type") for dep in deps}

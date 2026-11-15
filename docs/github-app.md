@@ -7,12 +7,12 @@ patch の更新を自動で承認し、マージキューに入れるための G
 
 理由は 2 つあります。
 
-1 つ目は、マージキューの検査です。
-workflow の `GITHUB_TOKEN` で PR をマージキューに入れると、`merge_group` の検査が起動しません。
+1 つ目は、マージキューの CI です。
+workflow の `GITHUB_TOKEN` で PR をマージキューに入れると、`merge_group` の CI が起動しません。
 `GITHUB_TOKEN` が起こしたイベントは、workflow を起動しないためです。
-このリポジトリでは、キューに入った PR が検査待ちのまま 3 分以上動かないことを確かめました。
-同じ PR を人のアカウントで入れ直すと、検査が起動し、30 秒ほどでマージされました。
-キューのブランチを指して検査を `workflow_dispatch` で起動する方法も試しました。検査は成功しましたが、キューは 16 分たっても進みませんでした。
+このリポジトリでは、キューに入った PR が CI 待ちのまま 3 分以上動かないことを確かめました。
+同じ PR を人のアカウントで入れ直すと、CI が起動し、30 秒ほどでマージされました。
+キューのブランチを指して CI を `workflow_dispatch` で起動する方法も試しました。CI は成功しましたが、キューは 16 分たっても進みませんでした。
 
 2 つ目は、承認の権限です。
 `GITHUB_TOKEN` に承認を許すと、書き込み権限のある人は誰でも、自分のブランチに足した workflow で PR を承認できます。
@@ -114,7 +114,7 @@ gh api orgs/<組織>/actions/permissions/workflow
 
 このリポジトリで確かめた結果は、[app-request.md](app-request.md) に実行の URL つきで書いています。
 
-- patch の更新で、ロックファイルだけを変える Dependabot の PR を待つ。検査が通ると、App が承認し、`automerge` ラベルが付き、マージキューを通ってマージされる
+- patch の更新で、ロックファイルだけを変える Dependabot の PR を待つ。CI が通ると、App が承認し、`automerge` ラベルが付き、マージキューを通ってマージされる
 - main 以外のブランチに、`environment: automerge` を指定した job を足す。その job は、ブランチが許可されていないという理由で動かない
 - main 以外のブランチに、`GITHUB_TOKEN` で PR を承認する workflow を足す。承認の API は 422 で失敗する
 

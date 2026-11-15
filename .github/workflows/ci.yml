@@ -18,7 +18,7 @@ concurrency:
 # web、infra、automation、image は、Python の環境を使わない。uv run のために Python と uv を入れると、
 # job あたり 8〜10 秒かかる（測った）。pipx で uv.lock と同じバージョンの just を入れると 3 秒なので、こちらにしている。
 # job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
-# バージョンは正本から読む。
+# バージョンは管理場所から読む。
 # - Python: .python-version（setup-python が読んで入れる）
 # - Node: .tool-versions（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: バージョンを正本から読む
+      - name: バージョンを管理場所から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v7.1.0
@@ -55,7 +55,7 @@ jobs:
         working-directory: api
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: バージョンを正本から読む
+      - name: バージョンを管理場所から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -78,7 +78,7 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: バージョンを正本から読む
+      - name: バージョンを管理場所から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -100,7 +100,7 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: Terraform のバージョンを正本から読む
+      - name: Terraform のバージョンを管理場所から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -118,12 +118,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.3
-      - name: バージョンを正本から読む
+      - name: バージョンを管理場所から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - name: just を入れる
         run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - name: 振り分けとバージョンの同期のテスト。バージョンの正本と見張り役が揃っていることも確かめる
+      - name: 振り分けとバージョンの同期のテスト。バージョンの管理場所と Dependabot 用の Dockerfile が揃っていることも確かめる
         run: just automation
 
   # 本番のイメージがビルドできることを確かめる。起動の確認とテストは、ここでは行わない。
@@ -138,12 +138,12 @@ jobs:
           path: /tmp/buildcache
           key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', 'uv.lock') }}
           restore-keys: image-
-      - name: バージョンを正本から読む
+      - name: バージョンを管理場所から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - name: just を入れる
         run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - name: API のイメージを正本のバージョンでビルドする
+      - name: API のイメージを管理場所のバージョンでビルドする
         run: |
           docker buildx create --name ci --use >/dev/null
           just image --builder ci \
@@ -151,14 +151,14 @@ jobs:
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache
 
-  # 必須の検査はこの 1 つだけにする。テストとイメージのビルドが、すべて成功したときだけ成功する。
+  # 必須のチェックはこの 1 つだけにする。テストとイメージのビルドが、すべて成功したときだけ成功する。
   all-green:
     if: always()
     needs: [workspace, api, web, infra, automation, image]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: すべての検査の結果を確かめる
+      - name: すべての job の結果を確かめる
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |

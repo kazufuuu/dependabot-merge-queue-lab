@@ -21,25 +21,24 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 |---|---|
 | patch、minor、major | バージョンの 3 つの数字のうち、どこが上がるか。1.2.3 から 1.2.4 が patch、1.3.0 が minor、2.0.0 が major |
 | ロックファイル | 実際に使うバージョンを記録するファイル（`uv.lock`、`package-lock.json`、`.terraform.lock.hcl`）。道具が書き出す |
-| 検査 | PR ごとに自動で動くテストと、本番のイメージのビルド。結果は `all-green` の 1 つにまとまる |
-| マージキュー | 承認済みの PR を、最新の main と合わせて検査し直してから入れる、GitHub の待ち行列 |
-| cooldown | 公開から 7 日たつまで、そのバージョンを取り込まない決まり。セキュリティの修正には置かない |
-| バージョンの正本 | Python、Node、Terraform の本体のバージョンを書いたファイル（`.python-version`、`.tool-versions`、`infra/versions.tf`）。バージョンを確かめるときも、変えるときも、ここを見る |
-| 見張り役 | `versions/Dockerfile`。Dependabot に新しいバージョンを見つけさせるためだけのファイル。バージョンを管理する場所ではない。中身は、機械が正本に揃える |
+| CI | PR ごとに自動で動くテストと、本番のイメージのビルド。結果は `all-green` の 1 つにまとまる |
+| マージキュー | 承認済みの PR を、最新の main と合わせて CI を動かし直してから入れる、GitHub の待ち行列 |
+| cooldown | 公開から 7 日たつまで、そのバージョンを取り込まない決まり。セキュリティアップデートには置かない |
+| Dependabot 用の Dockerfile | `versions/Dockerfile`。Dependabot に新しいバージョンを見つけさせるためだけのファイル。バージョンを管理する場所ではない。中身は、機械が `.python-version` などに揃える |
 | GitHub App（App） | この仕組み専用の、機械のアカウントにあたるもの。条件を満たした PR を承認して、マージキューに入れる。人のアカウントではない |
 | 所有者、team | `.github/CODEOWNERS` に書いた、ファイルの責任者。このリポジトリでは、1 つの team（GitHub 上のメンバーの集まり）が、すべてのファイルの所有者になっている |
 
 ## メンバー向け
 
-### バージョンの置き場所
+### バージョンの管理場所
 
 バージョンを確かめるときと、変えるときに見るファイルは、次のとおりです。
 
 | 対象 | バージョンを書くファイル | 実際のバージョンが決まるファイル |
 |---|---|---|
-| Python の本体 | `.python-version`（例: `3.13.16`） | `.python-version`。patch まで書く |
-| Node の本体 | `.tool-versions` の `nodejs` の行（例: `nodejs 24.20.0`） | `.tool-versions`。patch まで書く |
-| Terraform の本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | `infra/versions.tf`。patch まで書く |
+| Python のランタイム | `.python-version`（例: `3.13.16`） | `.python-version`。patch まで書く |
+| Node のランタイム | `.tool-versions` の `nodejs` の行（例: `nodejs 24.20.0`） | `.tool-versions`。patch まで書く |
+| Terraform 本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | `infra/versions.tf`。patch まで書く |
 | uv | 直下の `pyproject.toml` の開発用の依存（範囲。例: `uv>=0.13,<0.14`） | `uv.lock` |
 | Python のライブラリ | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の依存（範囲） | `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json`（範囲） | `web/package-lock.json` |
@@ -58,14 +57,14 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | ライブラリの patch で、ロックファイルだけが変わる | ロックファイル（`uv.lock`、`api/uv.lock`、`web/package-lock.json`、`infra/.terraform.lock.hcl`） | テストが通ると、`automerge` ラベルが付き、2〜3 分で main に入る | 何もしない |
 | ライブラリの patch で、テストが落ちた | ロックファイル | `needs-review` ラベルと理由のコメントが付く | レビューする |
 | ライブラリの minor、major | 範囲の中ならロックファイルだけ。範囲を超えると、`pyproject.toml`、`package.json`、`infra/versions.tf` も変わる | `needs-review` ラベルが付く | レビューする |
-| Python、Node、Terraform の本体 | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
+| Python と Node のランタイム、Terraform 本体 | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
 | uv、just | `uv.lock`。範囲を超えると、直下の `pyproject.toml` も変わる | patch は、テストが通ると自動で入る。minor と major は、`needs-review` ラベルが付く | patch は何もしない。minor と major はレビューする |
 | GitHub Actions | `.github/workflows/*.yml` と `.github/workflows/actions.lock` | 週に 1 本にまとまって出る | レビューする |
-| セキュリティの修正 | 通常の更新と同じファイル | cooldown なしで出る。自動で入るか、人が判断するかの分け方は、通常の更新と同じ | ライブラリの patch でテストが通れば、何もしない。ほかはレビューする |
+| セキュリティアップデート | 通常の更新と同じファイル | cooldown なしで出る。自動で入るか、人が判断するかの分け方は、通常の更新と同じ | ライブラリの patch でテストが通れば、何もしない。ほかはレビューする |
 
 届く量の目安は、次のとおりです。
 
-- 見る PR は、依存ごとに、新しい minor や major が出た週に 1 本です。道具の本体は、新しいバージョンが出た週に 1 本、GitHub Actions は週に 1 本です
+- 見る PR は、依存ごとに、新しい minor や major が出た週に 1 本です。Python と Node のランタイム、Terraform 本体は、新しいバージョンが出た週に 1 本、GitHub Actions は週に 1 本です
 - 自動で入る PR は、週に最大 14 本です。ロックファイルだけが変わりうる依存の数です
 - 検証の初回は、溜まっていた更新がまとめて出て、見る PR が 17 本になりました。2 週目以降の本数は、測っていません
 
@@ -80,14 +79,14 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 
 ### レビューの進め方
 
-1. PR のコメントで、人に回った理由を読む。「minor は人が見ます」「必須の検査が落ちました」などと書いてある
+1. PR のコメントで、人に回った理由を読む。「minor は人が見ます」「必須のチェックが落ちました」などと書いてある
 2. Dependabot が PR の本文に付ける、リリースノートと変更の一覧を読む
-3. 検査の結果を見る。落ちていれば、次の節へ進む
-4. 問題が無ければ、Approve して、Merge when ready を押す。マージキューが、最新の main と合わせて検査し直してから入れる
+3. CI の結果を見る。落ちていれば、次の節へ進む
+4. 問題が無ければ、Approve して、Merge when ready を押す。マージキューが、最新の main と合わせて CI を動かし直してから入れる
 
-Python の patch の PR は、uv のバージョンに関係なく検査が動きます。CI では、Python を setup-python が入れ、uv には取ってこさせないためです。uv を上げないまま Python を 3.13.18 にして、検査が通ることを確かめました（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。
+Python の patch の PR は、uv のバージョンに関係なく CI が動きます。CI では、Python を setup-python が入れ、uv には取ってこさせないためです。uv を上げないまま Python を 3.13.18 にして、CI が通ることを確かめました（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。
 
-マージキューの中の検査で落ちた PR は、キューから外れて、開いたままになります。自動マージの PR なら、`needs-review` ラベルが付いて人に回る作りです。この動きは、単体テストで確かめただけで、実物では起きていません。
+マージキューの中の CI で落ちた PR は、キューから外れて、開いたままになります。自動マージの PR なら、`needs-review` ラベルが付いて人に回る作りです。この動きは、単体テストで確かめただけで、実物では起きていません。
 
 入れない更新は、PR を閉じます。Dependabot は、そのバージョンを出し直しません。次のバージョンが出ると、新しい PR が出ます。
 
@@ -114,14 +113,14 @@ Python の patch の PR は、uv のバージョンに関係なく検査が動�
 
 Python の minor や major、Node の major を上げる手順は、「Python と Node の大きい更新」の節にあります。
 
-レシピを動かし忘れた PR は、検査で止まります。
+レシピを動かし忘れた PR は、CI で止まります。
 
 | 忘れたこと | 起きること | 直し方 |
 |---|---|---|
-| `.python-version`、`.tool-versions`、`infra/versions.tf` を書き換えたあと、`uv run just align` を動かさなかった | 検査の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `uv run just align` を動かし、`versions/Dockerfile` をコミットする |
-| `pyproject.toml` の範囲を書き換えたあと、`uv run just lock-python` を動かさなかった | 検査の `workspace` か `api` が落ちる。「The lockfile at `uv.lock` needs to be updated」と出る（手元で確かめた） | `uv run just lock-python` を動かし、`uv.lock` と `api/uv.lock` をコミットする |
-| `web/package.json` の範囲を書き換えたあと、`uv run just lock-web` を動かさなかった | 検査の `web` が、`npm ci` で落ちる（npm の決まった動き。このリポジトリでは試していない） | `uv run just lock-web` を動かし、`web/package-lock.json` をコミットする |
-| workflow の `uses:` を書き換えたあと、`uv run just lock-actions` を動かさなかった | workflow が起動しない。検査の結果が付かないので、マージできない。Actions の画面に「This run likely failed because of a workflow file issue.」と出る（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめた） | `uv run just lock-actions` を動かし、`.github/workflows/actions.lock` をコミットする |
+| `.python-version`、`.tool-versions`、`infra/versions.tf` を書き換えたあと、`uv run just align` を動かさなかった | CI の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `uv run just align` を動かし、`versions/Dockerfile` をコミットする |
+| `pyproject.toml` の範囲を書き換えたあと、`uv run just lock-python` を動かさなかった | CI の `workspace` か `api` が落ちる。「The lockfile at `uv.lock` needs to be updated」と出る（手元で確かめた） | `uv run just lock-python` を動かし、`uv.lock` と `api/uv.lock` をコミットする |
+| `web/package.json` の範囲を書き換えたあと、`uv run just lock-web` を動かさなかった | CI の `web` が、`npm ci` で落ちる（npm の決まった動き。このリポジトリでは試していない） | `uv run just lock-web` を動かし、`web/package-lock.json` をコミットする |
+| workflow の `uses:` を書き換えたあと、`uv run just lock-actions` を動かさなかった | workflow が起動しない。CI の結果が付かないので、マージできない。Actions の画面に「This run likely failed because of a workflow file issue.」と出る（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめた） | `uv run just lock-actions` を動かし、`.github/workflows/actions.lock` をコミットする |
 
 レシピが使う道具の入れ方は、「手元の始め方」の節にあります。
 
@@ -140,7 +139,7 @@ Python の minor や major を上げるときに書き換える場所は、次�
 | 5 | `uv.lock`、`api/uv.lock` | 手では書き換えない。`uv run just lock-python` を動かす。ロックファイルが解き直される |
 
 書き換えたあと、`uv run just workspace` と `uv run just api` で、lint とテストを動かします。新しい Python に対応していない依存があると、`uv run just lock-python` かテストで分かります。
-Python の手順は、3.13.16 から 3.14.9 へ上げて、手元で通しました。lint とテストは通りました。本番のイメージのビルドと、PR にして検査を通すところは、試していません。
+Python の手順は、3.13.16 から 3.14.9 へ上げて、手元で通しました。lint とテストは通りました。本番のイメージのビルドと、PR にして CI を通すところは、試していません。
 Dependabot の設定（`.github/dependabot.yml` の `ignore`）は、変えなくて構いません。Python を上げたあとは、新しい系列の patch の PR が出ます。
 
 Node の major を上げるときに書き換える場所は、次のとおりです。Node の手順は、通して試していません。
@@ -159,13 +158,13 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 
 | レシピ | 行うこと |
 |---|---|
-| `uv run just test` | 手元の検査を全部動かす（本番のイメージのビルドは除く） |
-| `uv run just workspace`、`uv run just api`、`uv run just web`、`uv run just infra`、`uv run just automation` | 検査を 1 つずつ動かす。名前は、CI の job と同じ |
+| `uv run just test` | CI と同じテストを、手元で全部動かす（本番のイメージのビルドは除く） |
+| `uv run just workspace`、`uv run just api`、`uv run just web`、`uv run just infra`、`uv run just automation` | CI の job を 1 つずつ動かす。レシピの名前は、job と同じ |
 | `uv run just image -t api` | 本番の API のイメージをビルドする |
 | `uv run just versions` | 使っているバージョンを出す |
 | `uv run just align`、`uv run just lock-python`、`uv run just lock-web`、`uv run just lock-actions` | バージョンを書き換えたあとに動かす（「バージョンを変える手順」の節） |
 
-CI で検査が落ちたときは、落ちた job と同じ名前のレシピを手元で動かすと、同じコマンドが動きます。
+CI が落ちたときは、落ちた job と同じ名前のレシピを手元で動かすと、同じコマンドが動きます。
 
 `uv sync` で入らない道具と、バージョンのあるファイルは、次のとおりです。入れ方は自由です。
 
@@ -206,11 +205,11 @@ just は、ruff や pytest と同じ開発用の依存です。`uv run` で動�
 
 ### 全体の流れ
 
-1. Dependabot が、週に 1 回、新しいバージョンを確かめて PR を出す。セキュリティの修正は、待たずに出す
-2. 見張り役を上げる PR には、`version-sync` が、バージョンを正本に写すコミットを足す
-3. `ci` が検査を動かす
+1. Dependabot が、週に 1 回、新しいバージョンを確かめて PR を出す。セキュリティアップデートは、待たずに出す
+2. Dependabot 用の Dockerfile を上げる PR には、`version-sync` が、`.python-version` などのバージョンを書き換えるコミットを足す
+3. workflow の `ci` が、テストとイメージのビルドを動かす
 4. `dependabot-merge` が、PR を振り分ける。条件を満たす PR は、App が承認してマージキューに入れる。それ以外には、`needs-review` ラベルと理由のコメントを付ける
-5. マージキューが、最新の main と合わせて検査し直し、通れば main に入れる
+5. マージキューが、最新の main と合わせて CI を動かし直し、通れば main に入れる
 
 ### 部品と役割
 
@@ -218,17 +217,17 @@ just は、ruff や pytest と同じ開発用の依存です。`uv run` で動�
 |---|---|
 | `.github/dependabot.yml` | 何を、いつ、どうまとめて更新するか |
 | `.github/CODEOWNERS` | すべてのファイルの所有者。レビューの依頼先になる |
-| `.github/workflows/ci.yml` | 検査。テストと、本番のイメージのビルド |
+| `.github/workflows/ci.yml` | CI。テストと、本番のイメージのビルド |
 | `.github/workflows/dependabot-merge.yml` と `automation/dependabot_merge.py` | PR の振り分けと、自動マージ |
 | `automation/dependabot_limit.py` | 開いている PR が上限に近づいたら、Issue で知らせる |
-| `.github/workflows/version-sync.yml` と `automation/version_sync.py` | 見張り役のバージョンを、正本へ写す |
-| `.github/workflows/security-release.yml` と `automation/security_release.py` | Python と Node のセキュリティの修正を含むバージョンを見つけ、待たずに PR を出す。Python と Node は別の PR |
-| `automation/versions.py` | バージョンの正本と見張り役を読み、揃っていることを確かめる |
+| `.github/workflows/version-sync.yml` と `automation/version_sync.py` | Dependabot 用の Dockerfile のバージョンを、`.python-version` などへ写す |
+| `.github/workflows/security-release.yml` と `automation/security_release.py` | Python と Node のセキュリティアップデートを見つけ、待たずに PR を出す。Python と Node は別の PR |
+| `automation/versions.py` | `.python-version` などのバージョンと、Dependabot 用の Dockerfile を読み、揃っていることを確かめる |
 | `justfile` | 人が手で打つ作業の入口。CI も同じレシピを呼ぶ |
 | `.github/workflows/dependabot-stats.yml` | Dependabot の PR の本数を、週に 1 回数える |
 | `.github/workflows/actions.lock` | workflow が使う action を、コミットで固定する |
 | `settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト |
-| GitHub App | 承認、マージキューへの投入、バージョンを写すコミット、セキュリティの修正の PR を行う主体 |
+| GitHub App | 承認、マージキューへの投入、バージョンを写すコミット、セキュリティアップデートの PR を行う主体 |
 | ruleset（`main`、`owners-lockfiles`、`owners-others`、`tags`） | main とタグの保護。App が所有者のレビューなしで通せるのは、ロックファイルだけ |
 
 ### 変えられる点
@@ -242,7 +241,7 @@ just は、ruff や pytest と同じ開発用の依存です。`uv run` で動�
 | cooldown | `.github/dependabot.yml` の `cooldown` の `default-days` |
 | 同時に開く PR の上限 | `.github/dependabot.yml` の `open-pull-requests-limit` |
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
-| 更新の対象 | `.github/dependabot.yml` に設定を足す。道具の本体は、見張り役の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
+| 更新の対象 | `.github/dependabot.yml` に設定を足す。Python や Node のようなランタイムを足すときは、Dependabot 用の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
 | ロックファイルの種類 | `automation/policy.json` の `lockfiles` に足し、`uv run just apply-settings <owner>/<repo>` を動かす |
 
 `uv run just apply-settings` は、`settings/apply.sh` を呼びます。組織の所有者で、リポジトリの管理者でもある人が動かします。
@@ -258,17 +257,17 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 |---|---|---|
 | patch の PR が出なくなった。エラーは無い | 更新の種類でまとめたグループの PR が開いている。Dependabot は、そのディレクトリの全部の依存を処理済みとみなす | 種類でまとめるグループを作らない。まとめるのは、バージョンが連動するライブラリ群だけにする |
 | patch の PR が出なくなった。エラーは無い。Dependabot のログには「created」と出る | 開いている PR が上限に達している | 人の判断待ちの PR を、マージするか閉じる。近づくと Issue が立つ |
-| 承認済みの PR が、マージキューで止まったまま | `GITHUB_TOKEN` でキューに入れた。キューの検査が起動しない | App のトークンで入れる。この仕組みは、そうしている |
-| 公開されたばかりのバージョンが提案された | Docker Hub 以外のレジストリのイメージでは、cooldown が効かない | イメージは Docker Hub のものを使う。ほかのレジストリのイメージを `FROM` に書くと、検査が落ちる |
-| Dependabot の uv の更新が失敗する | `requires-python` や `required-version` を 1 点に固定している | 範囲で書く。バージョンの固定は、正本のファイルで行う |
+| 承認済みの PR が、マージキューで止まったまま | `GITHUB_TOKEN` でキューに入れた。キューの CI が起動しない | App のトークンで入れる。この仕組みは、そうしている |
+| 公開されたばかりのバージョンが提案された | Docker Hub 以外のレジストリのイメージでは、cooldown が効かない | イメージは Docker Hub のものを使う。ほかのレジストリのイメージを `FROM` に書くと、CI が落ちる |
+| Dependabot の uv の更新が失敗する | `requires-python` や `required-version` を 1 点に固定している | 範囲で書く。バージョンの固定は、`.python-version` などのファイルで行う |
 | action の patch と minor の更新が出ない | `uses:` を major だけのタグ（`@v6`）で書いている | 完全なタグ（`@v6.0.3`）で書く |
-| App が承認したのに「レビューが必要」のまま | App 自身が最後に push した PR は、App の承認では通らない | 人が承認する。Python、Node、Terraform の本体の PR は、この形になる |
+| App が承認したのに「レビューが必要」のまま | App 自身が最後に push した PR は、App の承認では通らない | 人が承認する。Python と Node のランタイム、Terraform 本体の PR は、この形になる |
 | 手元で「No interpreter found for Python ...」と出る | 手元の uv が古く、その Python をまだ知らない | `uv self update` で uv を更新する。CI では起きない（Python は setup-python が入れる） |
 | セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。pytest の警告が直下と `api/` の 2 つにあり、直下の警告にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
-| 本体の PR が main と衝突した。`@dependabot rebase` が断られる | バージョンを正本に写すコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、バージョンを写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、1 時間たっても反応が無かった。理由は分かっていない） |
+| ランタイムや Terraform 本体の PR が main と衝突した。`@dependabot rebase` が断られる | `.python-version` などのバージョンを書き換えるコミットが足されているので、Dependabot は「ほかの人が編集した」とみなす | `@dependabot recreate` とコメントする。作り直され、バージョンを写すコミットも足し直される（Node と Terraform の PR で確かめた。同じ時に頼んだ Python の PR には、1 時間たっても反応が無かった。理由は分かっていない） |
 | Dependabot が PR を作り直さない | Dependabot は、コメントの依頼に反応しないことがある。確認が起きても、開いている PR を「すでにある」（already exists）と扱い、作り直さないことがある。どちらも、こちらでは直せない（[PR #78](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/78) で見た） | 人が衝突を直して入れるか、閉じて次のバージョンを待つ。確認を起こすには、`.github/dependabot.yml` の設定（時刻など）を変える。1 か所の時刻を変えただけで、全部の設定の確認が起きた。1 つの設定だけを起こすことは、できなかった。コメントだけの変更では起きない |
-| 見張り役から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を見張り役から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。枝は、閉じたあとに消す |
-| main に push できない | ruleset が、PR とレビューと検査を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
+| Dependabot 用の Dockerfile から外した依存の PR が、開いたまま残る | Dependabot は、設定から外れた依存を確かめなくなる。その PR を閉じもしない（uv を Dependabot 用の Dockerfile から外したあとの [PR #74](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/74) で見た。人が閉じた） | 人が PR を閉じる。枝は、閉じたあとに消す |
+| main に push できない | ruleset が、PR とレビューと CI を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 
 Dependabot の実行ログは、リポジトリの Insights、Dependency graph、Dependabot から見られます。
 
@@ -290,7 +289,7 @@ workflow の無効化と再開は、実際に行いました。
 | PR の本数の見直し | 週に 1 回 | `dependabot-stats` の実行結果を見る。人が承認するだけの PR が多ければ、自動の範囲を広げることを考える |
 | 判断待ちの PR の片づけ | Issue が立ったとき | 「Dependabot の PR が上限に近づいています」の Issue に、設定ごとの本数が出る |
 | App の鍵の作り直し | 組織の決まりに従う | [github-app.md](github-app.md) の「鍵の作り直し」。試していない |
-| `gh actions-lock` のバージョンの見直し | 拡張の新しいバージョンが出たとき | ロックファイルの書式は変わることがある。新しいバージョンで `uv run just lock-actions` を動かし、検査が通ることを確かめてから上げる |
+| `gh actions-lock` のバージョンの見直し | 拡張の新しいバージョンが出たとき | ロックファイルの書式は変わることがある。新しいバージョンで `uv run just lock-actions` を動かし、CI が通ることを確かめてから上げる |
 
 ## 情報システム部門の担当者への案内
 

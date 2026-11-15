@@ -1,8 +1,8 @@
-"""Python と Node のセキュリティの修正を含むバージョンを見つけ、待たずに PR を出す。
+"""Python と Node のセキュリティアップデートを見つけ、待たずに PR を出す。
 
-コンテナのイメージには、Dependabot のセキュリティ更新が無い。Dependabot は、公式イメージの
-新しいバージョンを、通常の更新として、cooldown のあとに出す。セキュリティの修正を含むバージョンだけは、
-この処理が、待たずに見張り役と正本を上げる PR を出す。
+コンテナのイメージには、Dependabot のセキュリティアップデートが無い。Dependabot は、公式イメージの
+新しいバージョンを、通常の更新として、cooldown のあとに出す。セキュリティアップデートだけは、
+この処理が、待たずに Dependabot 用の Dockerfile と管理場所を上げる PR を出す。
 
 見分け方は、公開されている情報を機械的に読むだけ。
 
@@ -10,7 +10,7 @@
 - Python: 今のバージョンに効く脆弱性を OSV（https://osv.dev）に聞き、その修正のコミットが
   新しいバージョンに入っているかを、GitHub の python/cpython で確かめる
 
-uv は PyPI のパッケージなので、Dependabot のセキュリティ更新が届く。ここでは扱わない。
+uv は PyPI のパッケージなので、Dependabot のセキュリティアップデートが届く。ここでは扱わない。
 
 2 つの段に分かれている。鍵を持つのは open だけで、open は main のファイルしか読まない。
 
@@ -43,7 +43,7 @@ HUB_TAG = "https://hub.docker.com/v2/repositories/{repository}/tags/{tag}"
 BRANCH_PREFIX = "security-release/"
 LABELS = ("dependencies", "needs-review")
 NAMES = ("python", "node")
-# 見張り役に -slim の付いたタグで書くイメージ。
+# Dependabot 用の Dockerfile に -slim の付いたタグで書くイメージ。
 SLIM = ("python", "node")
 PLAIN = re.compile(r"\d+\.\d+\.\d+")
 ADVISORY = re.compile(r"[A-Za-z0-9-]{1,40}")
@@ -154,7 +154,7 @@ def osv_affecting(commit: str) -> list[dict]:
 
 
 def image_published(name: str, version: Version) -> bool:
-    """Docker Hub に、見張り役に書くタグのイメージがあるかを返す。"""
+    """Docker Hub に、Dependabot 用の Dockerfile に書くタグのイメージがあるかを返す。"""
     image = versions.IMAGES[name]
     repository = image if "/" in image else f"library/{image}"
     tag = show(version) + ("-slim" if name in SLIM else "")
@@ -208,7 +208,7 @@ def find(repo: str, root: Path) -> None:
         now = parse(current[name])
         found = finder(now)
         if found is None:
-            print(f"{name}: {show(now)} より新しい、セキュリティの修正を含むバージョンはありません")
+            print(f"{name}: {show(now)} より新しい、セキュリティアップデートはありません")
             continue
         version, reasons = found
         if branch_part(name, version) in proposed:
@@ -249,7 +249,7 @@ def pull_request_body(name: str, old: str, new: str, reasons: list[str]) -> str:
     else:
         basis = f"[Node.js のバージョンの一覧]({NODE_INDEX})で、このバージョンの `security` が `true` です。"
     return (
-        f"{name} を {old} から {new} に上げます。セキュリティの修正を含むバージョンなので、cooldown を置かずに出しています。\n\n"
+        f"{name} を {old} から {new} に上げます。セキュリティアップデートなので、cooldown を置かずに出しています。\n\n"
         f"{basis}\n\n"
         "`automation/security_release.py` が出しました。自動ではマージされません。レビューをお願いします。"
     )
@@ -280,7 +280,7 @@ def open_pull_requests(repo: str, root: Path, targets: list[dict]) -> None:
     token = app_token(repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"])
     for name, version, reasons in changes:
         files = changed_files(root, name, version)
-        title = f"deps: bump {name} from {current[name]} to {show(version)}（セキュリティの修正）"
+        title = f"deps: bump {name} from {current[name]} to {show(version)}（セキュリティアップデート）"
         body = pull_request_body(name, current[name], show(version), reasons)
         branch = BRANCH_PREFIX + branch_part(name, version)
         commit = create_commit(repo, token, base, files, title)

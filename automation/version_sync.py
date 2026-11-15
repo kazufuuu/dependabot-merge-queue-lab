@@ -1,11 +1,11 @@
-"""見張り役のバージョンを上げる Dependabot の PR に、正本の変更を積む。
+"""Dependabot 用の Dockerfile のバージョンを上げる Dependabot の PR に、管理場所の変更を積む。
 
 することは「決まった場所の値を、決まった場所に写す」ことだけ。
 新しいバージョンを探すこと、cooldown を判断すること、PR を作ることは Dependabot に任せる。
 
 3 つの段に分かれている。鍵を持つのは push だけで、push は PR の中身を取り出さない。
 
-  prepare  対象の PR を 1 本選び、その head を pr/ に取り出して、見張り役のバージョンを正本へ写す（鍵なし）
+  prepare  対象の PR を 1 本選び、その head を pr/ に取り出して、Dependabot 用の Dockerfile のバージョンを .python-version などへ写す（鍵なし）
   collect  変わったファイルを確かめて集め、次の job に渡す（鍵なし）
   push     渡されたファイルを、App のトークンで PR のブランチにコミットする（鍵あり）
 
@@ -30,8 +30,8 @@ WORKTREE = Path("pr")
 # 積んでよいファイル。これ以外が変わっていたら、何もせずに失敗させる。
 ALLOWED = frozenset(versions.SOURCES[name] for name in versions.IMAGES)
 COMMIT_MESSAGE = (
-    "バージョンの正本を versions/Dockerfile に合わせる\n\n"
-    "Dependabot が上げた見張り役のバージョンを、正本へ写した。"
+    "バージョンの管理場所を versions/Dockerfile に合わせる\n\n"
+    "Dependabot が上げた Dependabot 用の Dockerfile のバージョンを、.python-version などへ写した。"
 )
 
 
@@ -40,7 +40,7 @@ class SyncError(Exception):
 
 
 def is_candidate(pr: dict) -> bool:
-    """Dependabot が push した、見張り役だけを変える PR かどうか。"""
+    """Dependabot が push した、Dependabot 用の Dockerfile だけを変える PR かどうか。"""
     commits = pr["commits"]
     return (
         len(commits) == 1
@@ -82,7 +82,7 @@ def write_output(**values: str) -> None:
 def prepare(repo: str) -> None:
     candidates = [pr for pr in fetch_pull_requests(repo, load_policy()) if is_candidate(pr)]
     if not candidates:
-        print("見張り役だけを変える Dependabot の PR はありません")
+        print("Dependabot 用の Dockerfile だけを変える Dependabot の PR はありません")
         write_output(number="")
         return
     pr = candidates[0]
@@ -93,7 +93,7 @@ def prepare(repo: str) -> None:
     except versions.VersionError as error:
         report_failure(repo, str(pr["number"]), error)
         raise
-    print(f"#{pr['number']}: 正本へ写したファイル: {changed or 'なし'}")
+    print(f"#{pr['number']}: .python-version などへ写したファイル: {changed or 'なし'}")
     write_output(number=str(pr["number"]) if changed else "", head=pr["head"])
 
 
@@ -158,7 +158,7 @@ def create_commit(repo: str, token: str, parent: str, files: dict[str, str], mes
 def report_failure(repo: str, number: str, error: Exception) -> None:
     """失敗を PR に残す。人が何を直せばよいかを書く。"""
     body = (
-        "バージョンの同期に失敗しました。この PR は、見張り役（`versions/Dockerfile`）と正本が食い違ったままです。\n\n"
+        "バージョンの同期に失敗しました。この PR は、Dependabot 用の Dockerfile（`versions/Dockerfile`）と管理場所が食い違ったままです。\n\n"
         f"- 理由: {error}\n"
         "- 直し方: この PR のブランチで `uv run just sync` を動かし、結果をコミットしてください。"
         "スクリプトがバージョンの記述を見つけられない場合は、理由に出ているファイルを確かめてください"

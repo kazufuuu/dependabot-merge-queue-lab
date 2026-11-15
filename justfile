@@ -6,7 +6,7 @@
 default:
     @{{ just_executable() }} --list --unsorted
 
-# 手元の検査を全部動かす（本番のイメージのビルドは除く）
+# CI と同じテストを、手元で全部動かす（本番のイメージのビルドは除く）
 test: workspace api web infra automation
 
 # ワークスペース（packages/ と tests/）の lint とテスト
@@ -21,7 +21,7 @@ api:
     uv sync --locked
     uv run --no-sync pytest
 
-# web の型の検査とテスト
+# web の型チェックとテスト
 [working-directory('web')]
 web:
     npm ci
@@ -54,7 +54,7 @@ align:
     python3 automation/versions.py align
     python3 automation/versions.py check
 
-# Dependabot の PR で、バージョンの同期が失敗したときに動かす。versions/Dockerfile のバージョンを、正本へ写す
+# Dependabot の PR で、バージョンの同期が失敗したときに動かす。versions/Dockerfile のバージョンを、.python-version などへ写す
 sync:
     python3 automation/versions.py sync
 

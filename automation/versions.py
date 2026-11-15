@@ -1,12 +1,12 @@
-"""ランタイムと道具のバージョンを、正本から読む。見張り役の Dockerfile と揃える。
+"""ランタイムと道具のバージョンを、管理場所から読む。Dependabot 用の Dockerfile と揃える。
 
-バージョンの正本は、それぞれの道具が自分で読む場所に置く。
+バージョンの管理場所は、それぞれの道具が自分で読む場所に置く。
 
 - Python: .python-version（uv が読む。api/ からも、親のディレクトリのこのファイルが読まれる）
 - Node: .tool-versions（手元では mise や asdf が読む。CI では setup-node が読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
 
-uv は、ここでは正本を持たない。ライブラリと同じく、pyproject.toml の開発用の依存に範囲で書き、
+uv は、ここでは管理場所を持たない。ライブラリと同じく、pyproject.toml の開発用の依存に範囲で書き、
 バージョンは uv.lock が決める。CI と本番のイメージは、uv.lock のバージョンを使う（show が uv.lock から読んで出す）。
 手元の uv は、[tool.uv] required-version の下限より新しければよい。
 just（タスクランナー）も同じ。PyPI の rust-just を開発用の依存に書き、CI は uv.lock のバージョンを使う。
@@ -15,15 +15,15 @@ just（タスクランナー）も同じ。PyPI の rust-just を開発用の依
 - requires-python: Dependabot は自分の Python（別の patch）で uv lock を動かす
 - [tool.uv] required-version（uv.toml でも同じ）: Dependabot は自分の uv で uv lock を動かす
 
-どの正本も、Dependabot は書き換えられない。書き換えられるのは Dockerfile の
-FROM なので、versions/Dockerfile を見張り役として置き、Dependabot にはそこを上げさせる。
-このスクリプトの sync は、見張り役のバージョンを正本へ写すだけを行う。新しいバージョンは探さない。
+どの管理場所も、Dependabot は書き換えられない。書き換えられるのは Dockerfile の
+FROM なので、versions/Dockerfile を Dependabot 用の Dockerfile として置き、Dependabot にはそこを上げさせる。
+このスクリプトの sync は、Dependabot 用の Dockerfile のバージョンを .python-version などへ写すだけを行う。新しいバージョンは探さない。
 
 使い方:
-  versions.py show          正本のバージョンと、uv.lock の uv と just のバージョンを key=value で出す
-  versions.py check         正本と見張り役が揃っていることを確かめる
-  versions.py sync          見張り役のバージョンを正本へ写す（Dependabot の PR に対して、workflow が動かす）
-  versions.py align         正本のバージョンを見張り役へ写す（人が正本を書き換えたあとに動かす）
+  versions.py show          管理場所のバージョンと、uv.lock の uv と just のバージョンを key=value で出す
+  versions.py check         管理場所と Dependabot 用の Dockerfile が揃っていることを確かめる
+  versions.py sync          Dependabot 用の Dockerfile のバージョンを .python-version などへ写す（Dependabot の PR に対して、workflow が動かす）
+  versions.py align         管理場所のバージョンを Dependabot 用の Dockerfile へ写す（人が管理場所を書き換えたあとに動かす）
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ TERRAFORM_FILE = "infra/versions.tf"
 UV_LOCK = "uv.lock"
 DOCKERFILES = (SENTINEL, "api/Dockerfile")
 
-# 見張り役の FROM に書くイメージ。段の名前が、バージョンの名前になる。
+# Dependabot 用の Dockerfile の FROM に書くイメージ。段の名前が、バージョンの名前になる。
 IMAGES = {
     "python": "python",
     "node": "node",
@@ -77,7 +77,7 @@ SOURCES = {
 
 
 def read_sources(root: Path) -> dict[str, str]:
-    """正本からバージョンを読む。"""
+    """管理場所からバージョンを読む。"""
     return {
         name: one(pattern, (root / SOURCES[name]).read_text(), SOURCES[name]).group(1)
         for name, pattern in PATTERNS.items()
@@ -98,7 +98,7 @@ def locked(root: Path, name: str) -> str:
 
 
 def read_sentinel(root: Path) -> dict[str, str]:
-    """見張り役の Dockerfile からバージョンを読む。"""
+    """Dependabot 用の Dockerfile からバージョンを読む。"""
     text = (root / SENTINEL).read_text()
     versions: dict[str, str] = {}
     for name, image in IMAGES.items():
@@ -135,8 +135,8 @@ def check(root: Path) -> list[str]:
     for name, version in wanted.items():
         if actual[name] != version:
             errors.append(
-                f"{name}: 正本（{SOURCES[name]}）は {actual[name]}、{SENTINEL} は {version}。"
-                "正本を直したのなら uv run just align を、見張り役を直したのなら uv run just sync を動かしてください"
+                f"{name}: 管理場所（{SOURCES[name]}）は {actual[name]}、{SENTINEL} は {version}。"
+                "管理場所を直したのなら uv run just align を、Dependabot 用の Dockerfile を直したのなら uv run just sync を動かしてください"
             )
     for path in DOCKERFILES:
         for image in images_outside_docker_hub((root / path).read_text()):
@@ -145,7 +145,7 @@ def check(root: Path) -> list[str]:
 
 
 def sync(root: Path) -> list[str]:
-    """見張り役のバージョンを正本へ写す。書き換えたファイルを返す。"""
+    """Dependabot 用の Dockerfile のバージョンを .python-version などへ写す。書き換えたファイルを返す。"""
     wanted = read_sentinel(root)
     changed: list[str] = []
     for name, version in wanted.items():
@@ -162,7 +162,7 @@ def sync(root: Path) -> list[str]:
 
 
 def align(root: Path) -> list[str]:
-    """正本のバージョンを見張り役へ写す。人が意図してバージョンを変えるときに使う。"""
+    """管理場所のバージョンを Dependabot 用の Dockerfile へ写す。人が意図してバージョンを変えるときに使う。"""
     actual = read_sources(root)
     file = root / SENTINEL
     text = file.read_text()
@@ -179,7 +179,7 @@ def align(root: Path) -> list[str]:
 
 
 def set_version(root: Path, name: str, version: str) -> list[str]:
-    """正本と見張り役の両方を、指定のバージョンにする。書き換えたファイルを返す。"""
+    """管理場所と Dependabot 用の Dockerfile の両方を、指定のバージョンにする。書き換えたファイルを返す。"""
     if not re.fullmatch(VERSION, version):
         raise VersionError(f"{name}: バージョンの形が違います: {version}")
     path = SOURCES[name]
@@ -218,7 +218,7 @@ def main() -> int:
                 print(f"NG: {message}")
             if errors:
                 return 1
-            print("OK: バージョンの正本と見張り役は揃っています")
+            print("OK: バージョンの管理場所と Dependabot 用の Dockerfile は揃っています")
     except (VersionError, OSError) as error:
         print(f"NG: {error}")
         return 1

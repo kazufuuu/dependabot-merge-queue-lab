@@ -9,14 +9,14 @@
 - その head を push したのが Dependabot である（人が push し直したコミットは、中身が本物でも対象外）
 - 変わったファイルがロックファイルだけ
 - 更新の種別がすべて patch（設定で、開発用の依存の minor も足せる）
-- 必須の検査が、その head で成功している
+- 必須のチェックが、その head で成功している
 
-セキュリティ更新も、同じ条件で扱う。通常の更新との違いは、cooldown が無いことだけ。
-セキュリティ更新はグループに属さず、メタデータに種別も書かれない。
+セキュリティアップデートも、同じ条件で扱う。通常の更新との違いは、cooldown が無いことだけ。
+セキュリティアップデートはグループに属さず、メタデータに種別も書かれない。
 種別は、同じコミットメッセージに Dependabot が書く「from 旧 to 新」のバージョンから求める。
 
 開発用の依存の minor は、設定（AUTOMERGE_DEV_MINOR）で足せる。既定では無効。
-Python と Node の本体の更新は、ロックファイル以外が変わるので、patch でも人が判断する。
+Python と Node のランタイムの更新は、ロックファイル以外が変わるので、patch でも人が判断する。
 
 条件を満たさない PR には、レビューを依頼してラベルを付ける。
 承認とマージキューへの投入は、専用の GitHub App のトークンで行う。
@@ -146,7 +146,7 @@ def version_change(message: str, name: str) -> tuple[str, str] | None:
 def update_type_of(dep: dict[str, str], message: str) -> str | None:
     """更新の種別を返す。分からなければ None。
 
-    メタデータに種別があれば、それを使う。無ければ（セキュリティ更新）、バージョンの数字から求める。
+    メタデータに種別があれば、それを使う。無ければ（セキュリティアップデート）、バージョンの数字から求める。
     数字 3 つのバージョンどうしで、1 つ目と 2 つ目が同じ、3 つ目が上がっているときだけ patch とする。
     """
     if dep.get("update-type"):
@@ -175,7 +175,7 @@ def in_auto_scope(dep: dict[str, str], update_type: str | None, policy: Policy) 
 
 
 def classify(pr: dict, policy: Policy) -> Decision:
-    """検査の結果を見る前に、自動マージの候補かどうかを決める。"""
+    """CI の結果を見る前に、自動マージの候補かどうかを決める。"""
     reasons: list[str] = []
 
     commits = pr["commits"]
@@ -186,7 +186,7 @@ def classify(pr: dict, policy: Policy) -> Decision:
             reasons.append("Dependabot の署名の無いコミットがあります")
             break
 
-    # head の検査を起こした主体は、その head を push した主体と同じになる。
+    # head の CI を起こした主体は、その head を push した主体と同じになる。
     # 過去の本物のコミットを人が別のブランチへ持ってきた場合を、ここで弾く。
     pushers = set(pr["head_pushers"])
     if pushers - {DEPENDABOT_COMMITTER}:
@@ -242,14 +242,14 @@ def plan_for(pr: dict, policy: Policy) -> Plan:
 
     check = pr["check"]
     if check == "failure":
-        return to_human(("必須の検査が落ちました",))
+        return to_human(("必須のチェックが落ちました",))
     if check != "success":
-        return Plan(number, "自動マージの候補。検査の結果を待っています")
+        return Plan(number, "自動マージの候補。CI の結果を待っています")
     if waiting:
         return Plan(number, "自動マージの候補。マージの順番を待っています")
     if approved_head:
         # 一度キューに入れたのに、マージされずに外れている。
-        return to_human(("マージキューの検査で外されました",))
+        return to_human(("マージキューの CI で外されました",))
 
     plan = Plan(number, "自動マージ: 承認してマージキューに入れます", approve=True, enqueue=True)
     if LABEL_AUTO not in labels:
@@ -299,7 +299,7 @@ def gh(*args: str, token: str | None = None) -> str:
 
 
 def check_state(rollup: dict | None, required_check: str) -> str:
-    """head のコミットでの、必須の検査の結果を返す。"""
+    """head のコミットでの、必須のチェックの結果を返す。"""
     nodes = rollup["contexts"]["nodes"] if rollup else []
     runs = [run for run in nodes if run["__typename"] == "CheckRun" and run["name"] == required_check]
     if not runs or any(run["status"] != "COMPLETED" for run in runs):
@@ -308,7 +308,7 @@ def check_state(rollup: dict | None, required_check: str) -> str:
 
 
 def normalize(node: dict, policy: Policy, pushers: dict[str, list[str]]) -> dict:
-    """GraphQL の結果を、判定に使う形にする。pushers は、コミットごとの、検査を起こした主体。"""
+    """GraphQL の結果を、判定に使う形にする。pushers は、コミットごとの、CI を起こした主体。"""
     commits = [c["commit"] for c in node["commits"]["nodes"]]
     reviews = node["latestReviews"]["nodes"]
     return {
@@ -383,13 +383,13 @@ def apply_triage(plan: Plan, repo: str) -> None:
 def apply_merge(plan: Plan, pr: dict, repo: str, token: str) -> None:
     """承認してマージキューに入れる。専用の GitHub App のトークンで行う。
 
-    GITHUB_TOKEN でキューに入れると、merge_group の検査が起動せず、キューが止まる。
+    GITHUB_TOKEN でキューに入れると、merge_group の CI が起動せず、キューが止まる。
     """
     number = str(plan.number)
     gh(
         "api", "-X", "POST", f"repos/{repo}/pulls/{number}/reviews",
         "-f", "event=APPROVE", "-f", f"commit_id={pr['head']}",
-        "-f", "body=patch の更新で、検査が通っています。自動で承認します。",
+        "-f", "body=patch の更新で、CI が通っています。自動で承認します。",
         token=token,
     )  # fmt: skip
     gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)

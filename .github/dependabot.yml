@@ -10,7 +10,7 @@
 # minor のグループの PR が人の判断を待っている間、patch の自動マージが止まった（実物で確かめた）。
 # open-pull-requests-limit は、依存の数より大きくする。人の判断待ちの PR で埋まると、patch の PR も出なくなる。
 # 例外は github-actions。人が判断するので、patch、minor、major を 1 本にまとめる。
-# セキュリティ更新はグループに入れない。cooldown もかからず、依存ごとにすぐ出る。
+# セキュリティアップデートはグループに入れない。cooldown もかからず、依存ごとにすぐ出る。
 # 自動マージの条件は automation/dependabot_merge.py にある。所有者のレビューの決まりは settings/ にある。
 version: 2
 
@@ -77,15 +77,15 @@ updates:
     commit-message:
       prefix: deps
 
-  # Python、Node、Terraform の本体のバージョンの正本は、.python-version、.tool-versions、infra/versions.tf にある。
+  # Python と Node のランタイム、Terraform 本体のバージョンの管理場所は、.python-version、.tool-versions、infra/versions.tf にある。
   # Dependabot はそこを書き換えられない。
-  # 見張り役の versions/Dockerfile を上げさせ、version-sync の workflow が正本へ写す。
-  # cooldown は Docker Hub のイメージにしか効かないので、見張り役には Docker Hub のイメージを書く。
+  # Dependabot 用の versions/Dockerfile を上げさせ、version-sync の workflow が .python-version などへ写す。
+  # cooldown は Docker Hub のイメージにしか効かないので、Dependabot 用の Dockerfile には Docker Hub のイメージを書く。
   # uv は、ここには置かない。直下の uv の設定が、ライブラリと同じく、pyproject.toml の開発用の依存として上げる。
   - package-ecosystem: docker
     directory: /versions
-    # コンテナイメージには、Dependabot のセキュリティ更新が無い。ここでは通常の更新だけを、cooldown のあとに出す。
-    # Python と Node のセキュリティの修正を含むバージョンは、security-release の workflow が待たずに出す。
+    # コンテナイメージには、Dependabot のセキュリティアップデートが無い。ここでは通常の更新だけを、cooldown のあとに出す。
+    # Python と Node のセキュリティアップデートは、security-release の workflow が待たずに出す。
     schedule:
       interval: weekly
       day: monday
@@ -102,7 +102,7 @@ updates:
       # Python は patch だけを出す。minor（3.13 から 3.14）は、requires-python や依存の対応が要る。
       - dependency-name: python
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
-      # Node は同じ major の中を出す。Node は、セキュリティの修正も含めて、いちばん新しい minor にしか出さない。
+      # Node は同じ major の中を出す。Node は、セキュリティアップデートも含めて、いちばん新しい minor にしか出さない。
       # patch だけに絞ると、何も届かなくなる。
       - dependency-name: node
         update-types: ["version-update:semver-major"]

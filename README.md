@@ -7,15 +7,15 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 要件の一覧は [docs/requirements.md](docs/requirements.md) にあります。
 要件ごとの達成の状況は [docs/status.md](docs/status.md) にあります。
 
-## バージョンの置き場所
+## バージョンの管理場所
 
 バージョンを確かめるときと、変えるときに見るファイルは、次のとおりです。範囲と実際のバージョンが分かれるものは、「範囲 → 実際のバージョン」の順に書いています。
 
 | 対象 | ファイル |
 |---|---|
-| Python の本体 | `.python-version` |
-| Node の本体 | `.tool-versions` |
-| Terraform の本体 | `infra/versions.tf` の `required_version` |
+| Python のランタイム | `.python-version` |
+| Node のランタイム | `.tool-versions` |
+| Terraform 本体 | `infra/versions.tf` の `required_version` |
 | uv | 直下の `pyproject.toml` → `uv.lock` |
 | Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json` → `web/package-lock.json` |
@@ -28,19 +28,19 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 
 | 更新 | 変わるファイル | 扱い |
 |---|---|---|
-| 範囲の中の patch | ロックファイルだけ | 検査が通れば自動で承認し、マージキューに入れる |
+| 範囲の中の patch | ロックファイルだけ | CI が通れば自動で承認し、マージキューに入れる |
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
-| Python、Node、Terraform の本体のバージョン | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）と、見張り役の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
+| Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.tool-versions`、`infra/versions.tf`）と、Dependabot 用の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
 | uv、just | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
-| Python と Node の、セキュリティの修正を含むバージョン | 正本と、見張り役の `versions/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
+| Python と Node の、セキュリティアップデート | 管理場所と、Dependabot 用の `versions/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定したバージョン（Actions の `uses:`、`==` で書いた依存） | バージョンを書いたファイル | 人に依頼する。所有者の承認が要る |
-| セキュリティ更新 | 更新による | cooldown なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、検査が通れば自動でマージする |
-| 検査が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する。所有者の承認が要る |
+| セキュリティアップデート | 更新による | cooldown なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、CI が通れば自動でマージする |
+| CI が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する。所有者の承認が要る |
 
 自動マージの条件は、semver の種別と、変わるファイルの 2 つです。
 種別が patch で、変わるファイルがロックファイルだけのときに限って、自動でマージします。
-セキュリティ更新と通常の更新の違いは、cooldown の有無だけです。
+セキュリティアップデートと通常の更新の違いは、cooldown の有無だけです。
 
 ## 仕組み
 
@@ -65,7 +65,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 
 App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られます。
 人が出した PR は、ロックファイルだけの変更でも、所有者の承認が要ります。
-必須の検査、マージキュー、承認 1 件の規則（`main`）には、対象から外す主体がいません。App もこの 3 つを通します。
+必須のチェック、マージキュー、承認 1 件の規則（`main`）には、対象から外す主体がいません。App もこの 3 つを通します。
 
 歯止めは 2 段あります。1 段目は振り分けの判定で、変わったファイルがロックファイルだけであることを確かめます。
 2 段目は上の ruleset で、判定を通さずに App のトークンを直接使っても、GitHub が拒否します。
@@ -90,7 +90,7 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 開発用の依存の minor を自動マージの対象に足すときは、リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にします。
 振り分けは、グループの名前を見ません。種別と依存の種類を、Dependabot が署名したコミットのメッセージから読みます。
 
-セキュリティ更新のメタデータには、種別が書かれません。
+セキュリティアップデートのメタデータには、種別が書かれません。
 振り分けは、Dependabot が同じコミットメッセージに書く「from 旧いバージョン to 新しいバージョン」から種別を求めます。
 数字 3 つのバージョンどうしで、3 つ目だけが上がっているときに patch とみなします。それ以外は人に依頼します。
 
@@ -103,18 +103,18 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 - 上限を 10 に戻すと、同じ PR が出て、自動でマージされました（[PR #87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）
 - 気づき方: 残りが 2 本以下になると、「Dependabot の PR が上限に近づいています」という Issue が 1 件立ちます。`dependabot-merge` の workflow が、毎時、設定ごとの本数を数えています（`automation/dependabot_limit.py`）。本数が減ると、Issue は自動で閉じます
 - 直し方: 人の判断待ちの PR（`needs-review` ラベル）を、マージするか閉じます
-- セキュリティ更新の PR は、別の枠で出る決まりです。このリポジトリでは確かめていません
+- セキュリティアップデートの PR は、別の枠で出る決まりです。このリポジトリでは確かめていません
 
-### PR の本数と検査の回数
+### PR の本数と CI の回数
 
 種類でまとめるのをやめたあと、Dependabot が 1 回の確認で出した PR は 13 本でした（2026-11-15）。
 
 | 測ったもの | 数字 |
 |---|---|
-| 同時に開いている Dependabot の PR | 16 本（uv の直下 4、`/api` 3、npm 3、Terraform 1、見張り役 4、Actions 1） |
+| 同時に開いている Dependabot の PR | 16 本（uv の直下 4、`/api` 3、npm 3、Terraform 1、Dependabot 用の Dockerfile 4、Actions 1） |
 | 自動でマージされた patch の PR | 3 本。Dependabot の push からマージまで、2 分 47 秒、2 分 47 秒、2 分 11 秒 |
-| 検査の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの検査が 1 回加わる。バージョンの同期がコミットを積む PR は、もう 1 回 |
-| 同じロックファイルを変える PR どうしの衝突 | 起きなかった。`uv.lock` を変える PR が 4 本開いた状態で 1 本が入っても、残りは作り直されず、検査も走り直さなかった |
+| CI の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの CI が 1 回加わる。バージョンの同期がコミットを積む PR は、もう 1 回 |
+| 同じロックファイルを変える PR どうしの衝突 | 起きなかった。`uv.lock` を変える PR が 4 本開いた状態で 1 本が入っても、残りは作り直されず、CI も走り直さなかった |
 
 人が見る PR の本数は、次のとおりです。
 
@@ -123,14 +123,14 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 | ライブラリの minor | 7 本（vitest の群の 1 本を含む） | 依存ごとに、新しい minor が出た週に 1 本 |
 | ライブラリの major | 2 本 | 依存ごとに、新しい major が出た週に 1 本 |
 | ライブラリの patch で、人に回ったもの | 2 本（テストが落ちた phonenumbers、バージョンを固定している ruff） | テストが落ちたときと、`==` で固定した依存 |
-| Python、Node、uv、Terraform の本体 | 5 本（セキュリティの修正の 1 本を含む） | 道具ごとに、新しいバージョンが出た週に 1 本。セキュリティの修正は、待たずに別の 1 本 |
+| Python、Node、uv、Terraform 本体 | 5 本（セキュリティアップデートの 1 本を含む） | 道具ごとに、新しいバージョンが出た週に 1 本。セキュリティアップデートは、待たずに別の 1 本 |
 | GitHub Actions | 1 本 | 週に 1 本 |
 
 今開いている 17 本は、どれも本物の更新です。検証用に作った PR は、残っていません。
 本数が多いのは、このリポジトリを古いバージョンから始め、2 日間、人が 1 本も判断していないためです。溜まっていた更新が、1 回目の確認でまとめて出ました。
 2 週目以降に、週に何本出るかは、測っていません。上限は、依存の数（ライブラリ 14、道具 4、Actions 1）です。
 
-種類でまとめていたときは、patch の PR はディレクトリごとに 1 本、検査も 1 回でした。依存ごとに出す形では、patch の更新がある依存の数だけ、PR と検査が増えます。
+種類でまとめていたときは、patch の PR はディレクトリごとに 1 本、CI も 1 回でした。依存ごとに出す形では、patch の更新がある依存の数だけ、PR と CI が増えます。
 同じロックファイルの patch が 3 本以上重なった場合は、測れていません。このリポジトリには、同時に patch の更新がある依存が、ロックファイルごとに 1 つしかありませんでした。
 
 ### 振り分け
@@ -142,12 +142,12 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 - 種別は、Dependabot がコミットメッセージに書くメタデータで判定します
 - コミットが GitHub 自身の鍵で署名されていることと、その head を push したのが Dependabot であることを確かめます。作者の欄は自由に書けるので、判断に使いません
 - 人が見る PR には、`needs-review` ラベルと理由のコメントを付けます。レビューの依頼は、GitHub が CODEOWNERS から付けます
-- 自動マージする PR には、検査が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
-- マージキューの検査で外された PR も、人に依頼します
+- 自動マージする PR には、CI が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
+- マージキューの CI で外された PR も、人に依頼します
 
 承認とマージキューへの投入は、専用の GitHub App が行います。
 
-- `GITHUB_TOKEN` でキューに入れると、merge_group の検査が起動せず、キューが止まります。App のトークンで入れると起動します
+- `GITHUB_TOKEN` でキューに入れると、merge_group の CI が起動せず、キューが止まります。App のトークンで入れると起動します
 - App の鍵は environment `automerge` の secret に置きます。この environment は main だけが使えるので、ほかのブランチの workflow からは鍵を読めません
 - 「GitHub Actions による PR の承認」は無効にします。人が自分のブランチに workflow を足しても、自分の PR は承認できません
 
@@ -172,8 +172,8 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 ### 通知
 
-自動でマージされる PR の通知は、読まなくて構いません。人が見なくても、検査が通れば入るためです。
-検査が落ちたときは、振り分けが `needs-review` ラベルとコメントを付けるので、人が判断する PR に変わります。
+自動でマージされる PR の通知は、読まなくて構いません。人が見なくても、CI が通れば入るためです。
+CI が落ちたときは、振り分けが `needs-review` ラベルとコメントを付けるので、人が判断する PR に変わります。
 
 #### 届く数
 
@@ -181,7 +181,7 @@ GitHub の受信箱では、PR 1 本が通知 1 件にまとまります。こ�
 
 | 届く相手 | 理由 | 自動でマージされる PR での数 |
 |---|---|---|
-| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 14 件。セキュリティ更新の patch が出た週は、その本数が加わる |
+| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 14 件。セキュリティアップデートの patch が出た週は、その本数が加わる |
 | 割り振られたレビュワー | レビューの依頼（`review_requested`） | 同じ。team の中で回るので、1 人あたりは人数で割った数になる |
 
 週に最大 14 件は、設定から出した上限です。ロックファイルだけが変わりうる依存の数（uv の直下 4、`/api` 4、npm 4、Terraform 2）で、全部に patch の更新が出た週の数です。
@@ -209,9 +209,9 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 - 自分にレビューが依頼されている PR: `https://github.com/pulls/review-requested`
 - このリポジトリの、人が判断する PR: PR の一覧を `is:open label:needs-review` で絞り込む
 
-検査が落ちた patch も、題名の形は自動でマージされる PR と同じです。通知では区別できないので、一覧で確かめます。
+CI が落ちた patch も、題名の形は自動でマージされる PR と同じです。通知では区別できないので、一覧で確かめます。
 
-### 検査
+### CI
 
 `.github/workflows/ci.yml` は、テストを runner の上で直接動かします。docker の中では動かしません。
 依存はキャッシュします（uv は setup-uv、npm は setup-node）。
@@ -226,36 +226,36 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 |---|---|---|
 | `workspace` | workspace の lint とテスト | setup-python が `.python-version` の Python を入れる。`automation/versions.py show` が `uv.lock` から uv のバージョンを読み、setup-uv に渡す |
 | `api` | API のテスト | 同上 |
-| `web` | 型検査とテスト | setup-node が `.tool-versions` を読む |
+| `web` | 型チェックとテスト | setup-node が `.tool-versions` を読む |
 | `infra` | Terraform の書式、検証、テスト | `automation/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
 | `automation` | 振り分けとバージョンの同期のテスト、バージョンが揃っていることの確認 | runner の Python |
-| `image` | API のイメージのビルド | `scripts/build-api.sh` が正本から読み、ビルドの引数で渡す |
+| `image` | API のイメージのビルド | `scripts/build-api.sh` が `.python-version` と `uv.lock` から読み、ビルドの引数で渡す |
 
 `image` は、テストを動かしません。依存を入れてイメージをビルドするだけです。ビルドしたイメージの起動は確かめません。
 runner にはコンパイラが入っていますが、slim のイメージには入っていません。テストが通っても、イメージのビルドが落ちる更新があるので、毎回確かめます。ビルドの層はキャッシュします。
 Python は setup-python が入れ、uv には取ってこさせません（`UV_PYTHON_DOWNLOADS: never`）。
 uv は、取ってこられる Python の一覧を自分の中に持っています。古い uv は新しい Python を知りません。uv に取ってこさせると、Python の patch の更新が、uv のバージョンのせいで落ちます。
-必須の検査は、全部の結果をまとめた `all-green` の 1 つです。テストとイメージのビルドの、どれか 1 つでも落ちると、自動マージされません。
-マージキューでは、最新の main と合わせた状態で同じ検査が動きます。ブランチが古くても止まりません。
+必須のチェックは、全部の結果をまとめた `all-green` の 1 つです。テストとイメージのビルドの、どれか 1 つでも落ちると、自動マージされません。
+マージキューでは、最新の main と合わせた状態で同じ CI が動きます。ブランチが古くても止まりません。
 
-### バージョンの正本
+### ランタイムと Terraform 本体のバージョン
 
-Python、Node、Terraform の本体のバージョンは、それぞれの道具が自分で読む場所に、1 点に固定して書きます。
+Python と Node のランタイム、Terraform 本体のバージョンは、それぞれの道具が自分で読む場所に、1 点に固定して書きます。
 
-| バージョン | 正本 | 読む道具 |
+| バージョン | 管理場所 | 読む道具 |
 |---|---|---|
 | Python | `.python-version` | uv（`api/` でも、親のディレクトリのこのファイルを読む） |
 | Node | `.tool-versions` の `nodejs` の行 | 手元の mise や asdf。CI では setup-node |
 | Terraform | `infra/versions.tf` の `required_version = "= 1.16.x"` | terraform |
 
-手元、CI、本番のイメージは、どれもこの正本を読みます。Python と Node は、patch まで揃います。
+手元、CI、本番のイメージは、どれもこの管理場所を読みます。Python と Node は、patch まで揃います。
 
 - 手元: Node は、mise や asdf が `.tool-versions` のバージョンを入れます。Python は、uv が `.python-version` のバージョンを取得して使います
-- 手元のバージョンがずれていると、テストが落ちます。`tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、正本と比べます
-- CI: 「検査」の表のとおりです
+- 手元のバージョンがずれていると、テストが落ちます。`tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、管理場所と比べます
+- CI: 「CI」の表のとおりです
 - 本番のイメージ: `api/Dockerfile` は、バージョンをビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`scripts/build-api.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
 
-uv は、正本のファイルを持ちません。ライブラリと同じ扱いです。
+uv は、バージョンを 1 点に固定するファイルを持ちません。ライブラリと同じ扱いです。
 
 - 直下の `pyproject.toml` の開発用の依存に、範囲（`uv>=0.13,<0.14`）で書きます。バージョンは `uv.lock` が決めます
 - CI と本番のイメージは、`uv.lock` のバージョンを使います。`automation/versions.py show` が読んで渡します
@@ -275,35 +275,35 @@ Python のバージョンの照合は、テストに持たせています。Depe
 
 ### バージョンの更新の流れ
 
-Python、Node、Terraform の正本は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
-そこで、`versions/Dockerfile` を見張り役として置いています。ビルドしないファイルで、`FROM` にバージョンを並べただけのものです。
+Python、Node、Terraform の管理場所は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
+そこで、`versions/Dockerfile` を Dependabot 用の Dockerfile として置いています。ビルドしないファイルで、`FROM` にバージョンを並べただけのものです。
 
 1. Dependabot が、`versions/Dockerfile` のバージョンを上げる PR を出す。新しいバージョンを見つけること、cooldown、PR の作成は Dependabot の仕事
-2. `version-sync` の workflow が、見張り役のバージョンを正本へ写し、その PR にコミットを積む
-3. 検査が動く。PR は人のレビューに回る。コミットが 2 つになるので、自動マージの対象にはならない
+2. `version-sync` の workflow が、Dependabot 用の Dockerfile のバージョンを `.python-version` などへ写し、その PR にコミットを積む
+3. CI が動く。PR は人のレビューに回る。コミットが 2 つになるので、自動マージの対象にはならない
 
 出る PR の範囲は、`.github/dependabot.yml` の `ignore` で決めています。
 
-| 本体 | PR が出る更新 | 出ない更新 |
+| 対象 | PR が出る更新 | 出ない更新 |
 |---|---|---|
 | Python | patch（3.13.x の中） | minor と major。人が時期を決めて上げる |
 | Node | 同じ major の中（24.x の中の minor と patch） | major。人が時期を決めて上げる |
 | Terraform | patch、minor、major の全部 | なし |
 
-Node を patch だけに絞らないのは、Node のバージョンの出し方のためです。Node は、セキュリティの修正も含めて、いちばん新しい minor にしかバージョンを出しません。24.20.0 に 24.20.1 は出ません。patch だけに絞ると、何も届かなくなります。
-本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。反応が無いこともあります（[マニュアル](docs/manual.md)の「調べ方」）。バージョンを写すコミットが足されているので、`@dependabot rebase` は断られます。
-見張り役の `FROM` の間には、行を挟んでいます。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突するためです。
+Node を patch だけに絞らないのは、Node のバージョンの出し方のためです。Node は、セキュリティアップデートも含めて、いちばん新しい minor にしかバージョンを出しません。24.20.0 に 24.20.1 は出ません。patch だけに絞ると、何も届かなくなります。
+ランタイムや Terraform 本体の PR が main と衝突したときは、`@dependabot recreate` とコメントします。反応が無いこともあります（[マニュアル](docs/manual.md)の「調べ方」）。バージョンを写すコミットが足されているので、`@dependabot rebase` は断られます。
+Dependabot 用の Dockerfile の `FROM` の間には、行を挟んでいます。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突するためです。
 
 `version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。
 
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、バージョンを写します
-- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、正本の 3 つ（`.python-version`、`.tool-versions`、`infra/versions.tf`）に限っています
+- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、管理場所の 3 つ（`.python-version`、`.tool-versions`、`infra/versions.tf`）に限っています
 - 対象は、Dependabot が push した、`versions/Dockerfile` だけを変える PR です
-- バージョンの記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の検査も、見張り役と正本の食い違いで落ちたままになります
+- バージョンの記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の CI も、Dependabot 用の Dockerfile と管理場所の食い違いで落ちたままになります
 
-Renovate は、`.python-version` や `.tool-versions` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、見張り役と同期の仕掛けで補っています。
+Renovate は、`.python-version` や `.tool-versions` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、Dependabot 用の Dockerfile と同期の仕掛けで補っています。
 
-見張り役のイメージは Docker Hub のものに限ります。cooldown が Docker Hub のイメージにしか効かないためです。ほかのレジストリのイメージを書くと、検査が落ちます。
+Dependabot 用の Dockerfile のイメージは Docker Hub のものに限ります。cooldown が Docker Hub のイメージにしか効かないためです。ほかのレジストリのイメージを書くと、CI が落ちます。
 
 ### GitHub Actions のバージョン
 
@@ -312,7 +312,7 @@ workflow の `uses:` にはタグ（`actions/checkout@v6.0.3`）を書きます�
 ロックファイルは `gh actions-lock`（GitHub 公式の `gh` の拡張）が作ります。手では編集しません。
 
 `uses:` を足したり変えたりしたときは、`uv run just lock-actions` を動かして、ロックファイルも一緒にコミットします。
-ロックファイルと食い違う `uses:` を書いた workflow は、起動しません。検査の結果が付かないので、その PR はマージできません（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89)、[実行 43686598573](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43686598573)。「This run likely failed because of a workflow file issue.」）。
+ロックファイルと食い違う `uses:` を書いた workflow は、起動しません。CI の結果が付かないので、その PR はマージできません（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89)、[実行 43686598573](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43686598573)。「This run likely failed because of a workflow file issue.」）。
 Dependabot が action を上げる PR では、ロックファイルの書き換えも Dependabot が行います。人の手作業は要りません（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。
 
 Dependabot は、action を上げる PR で、workflow のファイルとロックファイルの両方を書き換えます。
@@ -325,7 +325,7 @@ Dependabot は、action を上げる PR で、workflow のファイルとロッ�
 | major だけのタグ（`@v6`） | major の更新だけを出す。patch と minor の更新は出ない。ロックファイルのコミットは、人が `gh actions-lock --relock` を動かすまで古いまま | [実行 43681122355]({U}/actions/runs/43681122355)（`actions/cache@v6` に更新が出なかった） |
 
 action の更新は、patch も含めて人が判断します。理由は 2 つです。ロックファイルだけが変わる PR にならないことと、workflow が鍵を扱うことです。
-その代わり、action の更新は、patch、minor、major を 1 本の PR にまとめます（`.github/dependabot.yml` の `actions` のグループ）。確認は週 1 回なので、週に 1 本ほどになります。セキュリティの修正は、待たずに別の PR で出ます。
+その代わり、action の更新は、patch、minor、major を 1 本の PR にまとめます（`.github/dependabot.yml` の `actions` のグループ）。確認は週 1 回なので、週に 1 本ほどになります。セキュリティアップデートは、待たずに別の PR で出ます。
 
 そのため、`uses:` は完全なタグで書きます。major だけのタグで書くと、更新の取りこぼしになります。
 major のタグを持たない action もあります（`astral-sh/setup-uv` に `v10` は無い）。
@@ -342,36 +342,36 @@ major のタグを持たない action もあります（`astral-sh/setup-uv` に
 | PyPI | 効く | 入る（`uv.lock`） |
 | npm | 効く | 入る（`package-lock.json`） |
 | Terraform のレジストリ | 効く | 入る（`.terraform.lock.hcl`） |
-| Docker Hub のイメージ | 効く | 入らない。見張り役の Dockerfile が変わる |
-| Docker Hub 以外のイメージ | 効かない | 入らない。検査が `FROM` に書くことを止める |
+| Docker Hub のイメージ | 効く | 入らない。Dependabot 用の Dockerfile が変わる |
+| Docker Hub 以外のイメージ | 効かない | 入らない。CI が `FROM` に書くことを止める |
 | GitHub Actions | 効く。日数はタグが指すコミットの日付で数える | 入らない。workflow のファイルが変わる |
-| セキュリティ更新 | かからない | 入る。patch で、ロックファイルだけが変わるとき |
-| Python と Node の、セキュリティの修正を含むバージョン | かからない。`security-release` が出す | 入らない。見張り役と正本が変わる |
+| セキュリティアップデート | かからない | 入る。patch で、ロックファイルだけが変わるとき |
+| Python と Node の、セキュリティアップデート | かからない。`security-release` が出す | 入らない。Dependabot 用の Dockerfile と管理場所が変わる |
 
 cooldown は、悪意のあるバージョンが発覚するまでの時間を取るものです。防ぐものではありません。
 確かめ方と実例は [docs/app-request.md](docs/app-request.md) の「cooldown の効く範囲」にあります。
 
-### セキュリティの修正への追随
+### セキュリティアップデートへの追随
 
-セキュリティの修正と通常の更新の違いは、cooldown を置くかどうかだけです。
+セキュリティアップデートと通常の更新の違いは、cooldown を置くかどうかだけです。
 
-| 対象 | 通常の更新 | セキュリティの修正 |
+| 対象 | 通常の更新 | セキュリティアップデート |
 |---|---|---|
-| ライブラリ（PyPI、npm） | Dependabot が、7 日待って出す | Dependabot のセキュリティ更新が、待たずに出す |
-| Python と Node の本体 | Dependabot が、7 日待って出す | `security-release` の workflow が、待たずに出す |
-| uv | ライブラリと同じ | ライブラリと同じ（PyPI のパッケージなので、Dependabot のセキュリティ更新が届く） |
+| ライブラリ（PyPI、npm） | Dependabot が、7 日待って出す | Dependabot のセキュリティアップデートが、待たずに出す |
+| Python と Node のランタイム | Dependabot が、7 日待って出す | `security-release` の workflow が、待たずに出す |
+| uv | ライブラリと同じ | ライブラリと同じ（PyPI のパッケージなので、Dependabot のセキュリティアップデートが届く） |
 
-ライブラリのセキュリティ更新が待たずに自動で入るのは、次の全部を満たすときです。
+ライブラリのセキュリティアップデートが待たずに自動で入るのは、次の全部を満たすときです。
 
-- GitHub の脆弱性のデータベース（GitHub Advisory Database）に登録された修正である。Dependabot がセキュリティ更新を出すのは、この場合だけ
+- GitHub の脆弱性のデータベース（GitHub Advisory Database）に登録された修正である。Dependabot がセキュリティアップデートを出すのは、この場合だけ
 - patch の更新で、ロックファイルだけが変わる
-- 検査が通る
+- CI が通る
 
-minor や major になる修正、manifest が変わる修正、検査が落ちる修正は、人に依頼します。
+minor や major になる修正、manifest が変わる修正、CI が落ちる修正は、人に依頼します。
 
-コンテナのイメージには、Dependabot のセキュリティ更新がありません。
-そこで、`.github/workflows/security-release.yml` が 4 時間ごとに、Python と Node のセキュリティの修正を含むバージョンを探します。
-見つけると、見張り役と正本をそのバージョンにする PR を、App が出します。判定は `automation/security_release.py` にあります。
+コンテナのイメージには、Dependabot のセキュリティアップデートがありません。
+そこで、`.github/workflows/security-release.yml` が 4 時間ごとに、Python と Node のセキュリティアップデートを探します。
+見つけると、Dependabot 用の Dockerfile と管理場所をそのバージョンにする PR を、App が出します。判定は `automation/security_release.py` にあります。
 
 | 対象 | 見分け方 |
 |---|---|
@@ -390,8 +390,8 @@ Dependabot は、7 日たつと同じバージョンを通常の更新として�
 
 Docker Hub の公式イメージは、同じタグのまま作り直されます。Dependabot は最後に push された日で cooldown を数えるので、通常の更新は、作り直しのたびに遅れます。
 
-Python、Node、Terraform の本体の PR は、すべて人が判断します。
-PR が出ると、バージョンを正本に写すコミットが機械で足され、検査が動き、レビュワーに依頼が付きます。人が行うのは承認だけです。
+Python と Node のランタイム、Terraform 本体の PR は、すべて人が判断します。
+PR が出ると、`.python-version` などのバージョンを書き換えるコミットが機械で足され、CI が動き、レビュワーに依頼が付きます。人が行うのは承認だけです。
 
 ## 手元の始め方
 
@@ -410,7 +410,7 @@ PR が出ると、バージョンを正本に写すコミットが機械で足�
 - Python: 入れなくてよい。uv が `.python-version` のバージョンを取得する。「No interpreter found for Python ...」と出たら、手元の uv が古く、その Python をまだ知らない。`uv self update` で uv を更新する
 - Node: nodejs.org から、そのバージョンを入れる
 
-手元の Python と Node のバージョンが正本と違うと、テストが落ちます。道具には依りません。
+手元の Python と Node のバージョンが管理場所と違うと、テストが落ちます。道具には依りません。
 `tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、ファイルのバージョンと比べます。
 
 確かめたのは、mise が `.tool-versions` と `.python-version` からバージョンを読むところ（`mise ls --current`）までです。それぞれの道具で実際に入れるところは、試していません。
@@ -418,8 +418,8 @@ PR が出ると、バージョンを正本に写すコミットが機械で足�
 最初に `uv sync` を動かします。作業は、`uv run just <レシピ>` で動かします。レシピは直下の `justfile` にあり、`uv run just --list` で、一覧と説明が出ます。
 
 ```sh
-uv run just test          # 手元の検査を全部（本番のイメージのビルドは除く）
-uv run just workspace     # 検査を 1 つずつ。ほかに api、web、infra、automation
+uv run just test          # CI と同じテストを、手元で全部（本番のイメージのビルドは除く）
+uv run just workspace     # CI の job を 1 つずつ。ほかに api、web、infra、automation
 uv run just image -t api  # 本番のイメージ
 ```
 
@@ -430,10 +430,10 @@ just は、ruff や pytest と同じ開発用の依存です（PyPI の `rust-ju
 ふだんの更新では、人はファイルを編集しません。レビューと承認だけを行います。
 minor や major を上げるなど、人が意図してバージョンを変えるときは、次の 2 つを行います。
 
-1. 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
-2. `uv run just align` を動かす。見張り役の `versions/Dockerfile` が、正本に揃う
+1. 管理場所（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
+2. `uv run just align` を動かす。Dependabot 用の `versions/Dockerfile` が、管理場所に揃う
 
-`uv run just align` を動かし忘れた PR は、検査の `automation` が落とします。
+`uv run just align` を動かし忘れた PR は、CI の `automation` が落とします。
 ライブラリの範囲や、workflow の action を変えるときのレシピは、[マニュアル](docs/manual.md)の「バージョンを変える手順」にあります。
 
 ## 設定の反映
@@ -441,7 +441,7 @@ minor や major を上げるなど、人が意図してバージョンを変え�
 `uv run just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `settings/apply.sh` です。
 ruleset は 4 つです。
 
-- `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須の検査、マージキュー
+- `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須のチェック、マージキュー
 - `owners-lockfiles` と `owners-others`: 所有者のレビュー。`settings/owner_rulesets.py` が、`automation/policy.json` のロックファイルの名前、team、App から作る
 - `tags`: タグの保護（`settings/ruleset-tags.json`）
 
@@ -456,8 +456,8 @@ App の作成をほかの部門に頼むときの依頼書は [docs/app-request.
 
 ## 残る制約
 
-- Python、Node、Terraform の本体のバージョン、Actions の `uses:`、`==` で固定した依存は、patch の更新でもバージョンを書いたファイルが変わるので、人の承認が要ります
-- 本番のイメージは、uv を Docker Hub のイメージ（`astral/uv`）から取ります。uv の更新の PR は PyPI のバージョンで出るので、そのバージョンのイメージが Docker Hub にまだ無いと、`image` の検査が落ちます
+- Python と Node のランタイム、Terraform 本体のバージョン、Actions の `uses:`、`==` で固定した依存は、patch の更新でもバージョンを書いたファイルが変わるので、人の承認が要ります
+- 本番のイメージは、uv を Docker Hub のイメージ（`astral/uv`）から取ります。uv の更新の PR は PyPI のバージョンで出るので、そのバージョンのイメージが Docker Hub にまだ無いと、`image` の job が落ちます
 - 手元のバージョンの照合は、テストを動かしたときに働きます。別のバージョンを入れた人は、テストが落ちて気づきます
 - Dependabot は、依存ごとに最新のバージョンだけを提案します。範囲を超えるバージョンが出ている依存では、範囲の中の patch は提案されません
 - uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります

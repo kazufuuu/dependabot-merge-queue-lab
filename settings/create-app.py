@@ -144,7 +144,7 @@ def main() -> int:
     manifest = {
         "name": args.name or f"{owner}-dependabot-automerge",
         "url": f"https://github.com/{args.repo}",
-        "description": "検査の通った patch の更新を承認し、マージキューに入れる",
+        "description": "CI の通った patch の更新を承認し、マージキューに入れる",
         "public": False,
         "hook_attributes": {"url": f"https://github.com/{args.repo}", "active": False},
         "redirect_url": f"http://localhost:{args.port}/callback",

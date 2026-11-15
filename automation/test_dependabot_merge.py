@@ -214,14 +214,14 @@ class SignatureTest(unittest.TestCase):
 
 
 def runtime_pr(**overrides) -> dict:
-    """Dependabot が見張り役の python を上げ、バージョンの同期が正本を積んだ PR。"""
+    """Dependabot が Dependabot 用の Dockerfile の python を上げ、バージョンの同期が管理場所を積んだ PR。"""
     first = {
         "message": message(dep("python")),
         "author": "dependabot[bot]",
         "signed_by_github": True,
         "pushers": ["dependabot[bot]"],
     }
-    second = {"message": "バージョンの正本を合わせる", "author": "sync-app[bot]", "signed_by_github": True, "pushers": ["sync-app[bot]"]}
+    second = {"message": "バージョンの管理場所を合わせる", "author": "sync-app[bot]", "signed_by_github": True, "pushers": ["sync-app[bot]"]}
     base = {
         "commits": [first, second],
         "head_pushers": ["sync-app[bot]"],
@@ -231,7 +231,7 @@ def runtime_pr(**overrides) -> dict:
 
 
 class RuntimeTest(unittest.TestCase):
-    """Python と Node の本体の更新は、patch でも人が判断する。"""
+    """Python と Node のランタイムの更新は、patch でも人が判断する。"""
 
     def test_patch_with_sync_commit_is_human(self):
         self.assertFalse(classify(runtime_pr(), POLICY).auto)
@@ -245,7 +245,7 @@ class RuntimeTest(unittest.TestCase):
 
 
 def security_message(*changes: tuple[str, str, str], kind="direct:production") -> str:
-    """セキュリティ更新のコミットメッセージ。グループも種別も書かれない。"""
+    """セキュリティアップデートのコミットメッセージ。グループも種別も書かれない。"""
     if len(changes) == 1:
         name, old, new = changes[0]
         prose = [f"Bumps [{name}](https://github.com/example/{name}) from {old} to {new}."]
@@ -266,7 +266,7 @@ def security_pr(*changes: tuple[str, str, str], **overrides) -> dict:
 
 
 class SecurityUpdateTest(unittest.TestCase):
-    """セキュリティ更新は、通常の更新と同じ条件で扱う。違いは cooldown だけ。"""
+    """セキュリティアップデートは、通常の更新と同じ条件で扱う。違いは cooldown だけ。"""
 
     def test_patch_is_auto(self):
         self.assertTrue(classify(security_pr(("jinja2", "3.1.4", "3.1.6")), POLICY).auto)
@@ -335,7 +335,7 @@ class PlanTest(unittest.TestCase):
         plan = plan_for(pr(check="failure"), POLICY)
         self.assertFalse(plan.approve or plan.enqueue)
         self.assertEqual(plan.add_labels, [LABEL_HUMAN])
-        self.assertIn("必須の検査が落ちました", plan.comment)
+        self.assertIn("必須のチェックが落ちました", plan.comment)
 
     def test_queued_pr_is_left_alone(self):
         target = pr(labels=[LABEL_AUTO], approved_commits=["aaa"], in_merge_queue=True)

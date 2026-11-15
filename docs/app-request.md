@@ -20,34 +20,34 @@
 | PR | pull request。変更を main に入れる前の、レビューの単位 |
 | patch の更新 | バージョンの 3 つ目の数字だけが上がる更新（1.2.3 から 1.2.4）。不具合の修正が中心 |
 | ロックファイル | 実際に使うバージョンを記録するファイル。人が書くのではなく、道具が書き出す |
-| 検査 | PR ごとに自動で動くテスト |
-| マージキュー | 承認済みの PR を並べ、最新の main と合わせて検査し直してから入れる、GitHub の待ち行列 |
+| CI | PR ごとに自動で動くテスト |
+| マージキュー | 承認済みの PR を並べ、最新の main と合わせて CI を動かし直してから入れる、GitHub の待ち行列 |
 | workflow | リポジトリに置いた自動処理（GitHub Actions） |
 | `GITHUB_TOKEN` | workflow に自動で渡る、そのリポジトリ用の一時的な権限 |
 | environment | secret の置き場所。使えるブランチを絞れる |
 | cooldown | Dependabot の設定。公開から決めた日数がたつまで、そのバージョンを提案しない |
-| ruleset | ブランチやタグの保護の決まり。レビューや検査を必須にする |
+| ruleset | ブランチやタグの保護の決まり。レビューや CI を必須にする |
 
 ## 目的
 
 依存の更新のうち、危険の小さいものを人の手を介さずに取り込みます。
-対象は、patch の更新で、ロックファイルだけが変わり、検査が通ったものです。
+対象は、patch の更新で、ロックファイルだけが変わり、CI が通ったものです。
 それ以外の更新は、これまでどおり人がレビューします。
 
 ## App が要る理由
 
 workflow の `GITHUB_TOKEN` だけでは、マージキューを使った自動マージが成り立ちません。
-`GITHUB_TOKEN` で PR をマージキューに入れると、キューの検査が起動せず、PR が待ったままになります。
+`GITHUB_TOKEN` で PR をマージキューに入れると、キューの CI が起動せず、PR が待ったままになります。
 `GITHUB_TOKEN` が起こした出来事は、ほかの workflow を起動しない決まりだからです。
 
 実例は次のとおりです。
 
 | 入れた主体 | 結果 | 証拠 |
 |---|---|---|
-| `GITHUB_TOKEN` | キューの検査が起動しない。3 分待っても検査待ちのまま | [PR #12 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12)（13:30:23 に `github-actions` が投入） |
-| `GITHUB_TOKEN`、検査を別の方法で起動 | 検査は成功したが、キューは 16 分進まない | [実行 43600679442](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43600679442)、[PR #15 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/15) |
-| 人のアカウント | キューの検査が起動し、46 秒後にマージ | [実行 43602072881](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43602072881) |
-| GitHub App | キューの検査が起動し、71 秒後にマージ | [実行 43605089530](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43605089530)、[PR #12](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12) |
+| `GITHUB_TOKEN` | キューの CI が起動しない。3 分待っても CI 待ちのまま | [PR #12 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12)（13:30:23 に `github-actions` が投入） |
+| `GITHUB_TOKEN`、CI を別の方法で起動 | CI は成功したが、キューは 16 分進まない | [実行 43600679442](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43600679442)、[PR #15 の経過](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/15) |
+| 人のアカウント | キューの CI が起動し、46 秒後にマージ | [実行 43602072881](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43602072881) |
+| GitHub App | キューの CI が起動し、71 秒後にマージ | [実行 43605089530](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43605089530)、[PR #12](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12) |
 
 ## 退けた案
 
@@ -68,12 +68,12 @@ App を入れたあと、この設定は組織とリポジトリの両方で無�
 
 ## 権限
 
-App の用途は 3 つです。条件を満たした PR の承認とマージ、Dependabot が上げたバージョンを正本のファイルへ写すコミット（README の「バージョンの更新の流れ」）、そして、Python と Node のセキュリティの修正を含むバージョンに上げる PR の作成です（README の「セキュリティの修正への追随」）。
+App の用途は 3 つです。条件を満たした PR の承認とマージ、Dependabot が上げたバージョンを`.python-version` などのファイルへ写すコミット（README の「バージョンの更新の流れ」）、そして、Python と Node のセキュリティアップデートに上げる PR の作成です（README の「セキュリティアップデートへの追随」）。
 
 | 権限 | 水準 | 使う操作 |
 |---|---|---|
-| Contents | 書き込み | PR をマージキューに入れ、main に入れる。Dependabot の PR のブランチに、バージョンを写すコミットを積む。セキュリティの修正を含むバージョンに上げるブランチを作る |
-| Pull requests | 書き込み | PR を承認する。`automerge` ラベルを付ける。セキュリティの修正を含むバージョンに上げる PR を出す |
+| Contents | 書き込み | PR をマージキューに入れ、main に入れる。Dependabot の PR のブランチに、バージョンを写すコミットを積む。セキュリティアップデートに上げるブランチを作る |
+| Pull requests | 書き込み | PR を承認する。`automerge` ラベルを付ける。セキュリティアップデートに上げる PR を出す |
 | Metadata | 読み取り | GitHub が自動で付ける |
 
 この 2 つで足りることは、実物で確かめました。[PR #12](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/12) と [PR #34](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/34) は、この権限だけの App が承認し、マージしています。
@@ -92,8 +92,8 @@ App のトークンを使う job は 3 つです。どれも main のバージ�
 | workflow と job | すること |
 |---|---|
 | `dependabot-merge` の `merge` | 条件を満たした PR を承認し、マージキューに入れる |
-| `version-sync` の `push` | Dependabot が見張り役のバージョンを上げた PR に、正本のファイルの変更を積む |
-| `security-release` の `open` | Python と Node のセキュリティの修正を含むバージョンに上げる PR を出す |
+| `version-sync` の `push` | Dependabot が Dependabot 用の Dockerfile のバージョンを上げた PR に、`.python-version` などのファイルの変更を積む |
+| `security-release` の `open` | Python と Node のセキュリティアップデートに上げる PR を出す |
 
 `merge` は、次の条件をすべて満たす PR だけを承認し、マージキューに入れます。
 
@@ -102,14 +102,14 @@ App のトークンを使う job は 3 つです。どれも main のバージ�
 3. そのコミットの作者が Dependabot で、GitHub 自身の鍵で署名されている
 4. その head を push したのが Dependabot である
 5. 変わったファイルがロックファイルだけである
-6. 更新がすべて patch である。脆弱性の修正として出る更新（セキュリティ更新）も、同じ条件で扱う。違いは、cooldown がかからないことだけ
-7. 検査がすべて通っている
+6. 更新がすべて patch である。脆弱性の修正として出る更新（セキュリティアップデート）も、同じ条件で扱う。違いは、cooldown がかからないことだけ
+7. CI がすべて通っている
 
 3 と 4 の確かめ方は次のとおりです。
 
 - コミットの作者の欄は、誰でも自由に書けます。作者の欄だけでは Dependabot と判断しません
 - 署名は、GitHub の API が返す `wasSignedByGitHub` を見ます。Dependabot のコミットは、GitHub 自身の鍵（署名者は `web-flow`）で署名されます。人が自分の鍵で署名したコミットは、署名が有効でも対象にしません
-- head を push した主体は、その head で検査を起こした主体（workflow の実行の `actor`）で確かめます。過去の本物のコミットを人が別のブランチへ持ってきた場合は、主体が人になるので対象にしません
+- head を push した主体は、その head で CI を起こした主体（workflow の実行の `actor`）で確かめます。過去の本物のコミットを人が別のブランチへ持ってきた場合は、主体が人になるので対象にしません
 
 判定の実装は `automation/dependabot_merge.py` の `classify` と `normalize` です。
 
@@ -117,8 +117,8 @@ App がしないことは次のとおりです。
 
 - 人が出した PR を承認しない
 - ロックファイル以外が変わる PR を承認しない。承認しても通りません。ロックファイル以外には所有者のレビューが必須で、App は所有者になれないからです
-- 検査が落ちた PR を承認しない
-- Python、Node、Terraform の本体のバージョンを上げる PR を承認しない。patch も含めて、すべて人が判断します
+- CI が落ちた PR を承認しない
+- Python と Node のランタイム、Terraform 本体のバージョンを上げる PR を承認しない。patch も含めて、すべて人が判断します
 - main に直接 push しない。main への変更は、PR とマージキューを必ず通ります
 
 この動きを保証している仕組みは次のとおりです。
@@ -128,8 +128,8 @@ App がしないことは次のとおりです。
 | 判定は main に入っているバージョンで動く | PR の中身で判定を書き換えられない。判定を変えるには、所有者のレビューを通す必要がある |
 | 鍵は environment `automerge` の secret に置く。この environment は main だけが使える | main 以外のブランチの workflow は、鍵を読めない |
 | ブランチ保護（ruleset）で、すべてのファイルに所有者のレビューを必須にする。ロックファイルの規則だけ、App を対象から外す | App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られる。人が出した PR は、ロックファイルだけでも所有者の承認が要る |
-| 必須の検査は、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
-| マージキューで、最新の main と合わせて検査し直す | 単独では通るが、合わせると壊れる変更が入らない |
+| 必須のチェックは、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
+| マージキューで、最新の main と合わせて CI を動かし直す | 単独では通るが、合わせると壊れる変更が入らない |
 
 鍵を使う job は、PR の中身を取り出しません。実行もしません。次の 2 か所で確かめられます。
 
@@ -149,10 +149,10 @@ App がしないことは次のとおりです。
 | 作者を Dependabot と偽り、署名の無いコミットを Dependabot の PR に push する（中身とメッセージは本物と同じ） | 対象から外れる。「Dependabot の署名の無いコミットがあります / head を push したのが Dependabot ではありません: kazufusa」 | [実行 43611062711](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611062711) |
 | GitHub の API でコミットを作り、作者を Dependabot と指定する | コミットは署名なし（`verified: false`、`reason: unsigned`）になり、対象から外れる | [実行 43611181132](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611181132) |
 | 本物の Dependabot のコミットを、人が push し直す | 対象から外れる。「head を push したのが Dependabot ではありません: dependabot[bot], kazufusa」 | [実行 43611286487](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611286487) |
-| 検査が落ちる patch の更新 | 承認されない。`needs-review` ラベルが付き、人に依頼が回る | [PR #16](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/16) |
-| セキュリティ更新 | 承認されない。人に依頼が回る | [PR #10](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/10) |
+| CI が落ちる patch の更新 | 承認されない。`needs-review` ラベルが付き、人に依頼が回る | [PR #16](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/16) |
+| セキュリティアップデート | 承認されない。人に依頼が回る | [PR #10](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/10) |
 | App のトークンを直接使い、ロックファイル以外を変える PR を承認して、マージキューに入れる。直接のマージも試す（判定を通さない。鍵が漏れた場合の再現） | どちらも拒否。「Waiting on required approvals from 1 team.」 | [実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)、[PR #54](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/54) |
-| App のトークンを直接使い、検査が落ちているロックファイルだけの PR を、マージキューに入れる | 拒否。「Required status check "all-green" is failing.」 | 同じ実行、[PR #41](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/41) |
+| App のトークンを直接使い、CI が落ちているロックファイルだけの PR を、マージキューに入れる | 拒否。「Required status check "all-green" is failing.」 | 同じ実行、[PR #41](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/41) |
 | 人が出したロックファイルだけの PR を、App の承認だけで、人がマージキューに入れる | 拒否。「Waiting on required approvals from kazufuuu/reviewers.」 | [PR #55](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/55)。App の承認は付いている |
 | App のトークンを直接使い、ロックファイルとそれ以外の両方を変える PR を通す | 拒否。「Waiting on required approvals from 1 team.」 | [実行 43675757390](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43675757390)、[PR #53](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/53)（試験用のブランチ `lab-base` で確かめた） |
 
@@ -194,7 +194,7 @@ App がしないことは次のとおりです。
 | できること | 止めるもの | 確かめたか |
 |---|---|---|
 | PR の承認 | ロックファイル以外には所有者のレビューが要る。App は所有者になれない。App が出した PR を App 自身は承認できない | ロックファイル以外を変える PR が、App の承認では通らないことを確かめた（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
-| main へのマージ | ruleset。PR、承認、検査、マージキューを通す必要がある。ロックファイル以外には、所有者のレビューも要る | 検査が落ちた PR と、ロックファイル以外を変える PR は、マージキューにも直接のマージにも拒否された（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
+| main へのマージ | ruleset。PR、承認、CI、マージキューを通す必要がある。ロックファイル以外には、所有者のレビューも要る | CI が落ちた PR と、ロックファイル以外を変える PR は、マージキューにも直接のマージにも拒否された（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
 | main への直接の push、main の削除 | ruleset `main`。対象から外す主体は登録していない | 人のアカウントで、push が拒否されることを確かめた。App では試していない |
 | main 以外のブランチへの push、作成、削除 | 止めない | 試していない |
 | タグの作成、更新、削除。リリースの作成 | タグの ruleset（`settings/ruleset-tags.json`）。管理者だけがタグを作れる | ruleset は入れた。App で拒否されることは試していない |
@@ -204,9 +204,9 @@ App がしないことは次のとおりです。
 
 止めないものの影響は次のとおりです。
 
-- main 以外のブランチに push できても、main に入れるにはレビューと検査が要ります
+- main 以外のブランチに push できても、main に入れるにはレビューと CI が要ります
 - Dependabot の PR のブランチに push すると、その PR は自動マージの対象から外れます（条件 4）
-- 人が出した、ロックファイルだけを変える PR は、鍵の持ち主が App で承認し、App でマージキューに入れると通ります。書き込み権限のある人と鍵の持ち主が組むと、ロックファイルの変更を人のレビューなしで入れられます。検査は通す必要があります。App がこの形の PR をキューに入れられることは、実物で確かめました（[実行 43676422072](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676422072)。キューからは、マージの前に外しました）
+- 人が出した、ロックファイルだけを変える PR は、鍵の持ち主が App で承認し、App でマージキューに入れると通ります。書き込み権限のある人と鍵の持ち主が組むと、ロックファイルの変更を人のレビューなしで入れられます。CI は通す必要があります。App がこの形の PR をキューに入れられることは、実物で確かめました（[実行 43676422072](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676422072)。キューからは、マージの前に外しました）
 - main 以外のブランチやタグから配布や公開をしているリポジトリでは、そのブランチとタグにも ruleset が要ります
 
 漏れに気づいたときは、App の設定画面で鍵を消します。消した鍵は、その時点で使えなくなります。
@@ -219,13 +219,13 @@ App がしないことは次のとおりです。
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 47 回です（2026-11-14 に 15 回、11-15 に 32 回）。
+そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 48 回です（2026-11-14 に 15 回、11-15 に 33 回）。
 11-15 の途中からは、`owners-lockfiles` と `owners-others` も同時に無効にしています。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
 人が 2 人以上いる組織では、この操作は要りません。
 
 ruleset の対象から外す主体は、1 つだけ登録しています。`owners-lockfiles`（ロックファイルの所有者のレビュー）に、自動マージの App です。
-`main`（PR、承認、検査、マージキュー）と `owners-others`（ロックファイル以外の所有者のレビュー）には、登録していません。
+`main`（PR、承認、CI、マージキュー）と `owners-others`（ロックファイル以外の所有者のレビュー）には、登録していません。
 
 ## cooldown の効く範囲
 
@@ -240,7 +240,7 @@ cooldown は 7 日に設定しています。ただし、配布元によって�
 | npm | 効く | 手元で Dependabot の本体を動かした | libphonenumber-js は、公開 4 日後の 1.13.16 が提案されなかった。cooldown を 0 日にすると提案された |
 | Terraform のレジストリ | 効く | 手元で Dependabot の本体を動かした | hashicorp/azurerm は、公開 1 日後の 5.14.0 が提案されなかった。cooldown を 0 日にすると提案された |
 | GitHub Actions | 効く。ただし数え方が違う | 手元で Dependabot の本体を動かした | 公開 4 日後のバージョンは提案されず、1 つ前のバージョンが提案された。日数は、公開日ではなく、タグが指すコミットの日付で数えていた。古いコミットにあとからタグを付けたバージョンは、公開の直後でも cooldown を通る |
-| セキュリティ更新 | かからない | 試していない | GitHub の仕様では、cooldown はセキュリティ更新にかからない。このリポジトリで出たセキュリティ更新は、どれも公開から 7 日以上たったバージョンだったので、実例にならない |
+| セキュリティアップデート | かからない | 試していない | GitHub の仕様では、cooldown はセキュリティアップデートにかからない。このリポジトリで出たセキュリティアップデートは、どれも公開から 7 日以上たったバージョンだったので、実例にならない |
 
 「手元で動かした」は、Dependabot の本体（dependabot-core）を dependabot CLI で動かした結果です。GitHub のサービス上の実行ではありません。
 Docker Hub 以外で効かない理由は、Dependabot の実装にあります。イメージの公開日を取る処理が Docker Hub にしか無く、取れないときは cooldown を飛ばします（dependabot-core の `docker/lib/dependabot/docker/update_checker.rb`）。ghcr.io に限らず、Docker Hub 以外のレジストリは同じ扱いです。
@@ -250,9 +250,9 @@ cooldown を設定に書かない場合も、Dependabot の本体は 3 日の co
 コンテナイメージと GitHub Actions の更新は、バージョンを書いたファイルが変わるので、cooldown が効くかどうかに関係なく、所有者のレビューを通ります。
 
 コンテナイメージは Docker Hub のものを使う決まりにしました。
-uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、cooldown を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、検査（`automation/versions.py check`）が落ちます。
+uv のイメージを ghcr.io から Docker Hub（`astral/uv`、中身は同じ）に替えたところ、0.13.8 ではなく、cooldown を満たす 0.13.7 が提案されました（[PR #35](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/35)、[実行 43611591787](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611591787)。ログは「Skipping tag 0.13.8 due to cooldown period」）。Docker Hub 以外のイメージを `FROM` に書くと、CI（`automation/versions.py check`）が落ちます。
 Docker Hub に無いイメージを使うときは、cooldown が効かないと承知したうえで、人のレビューで守ります。
-Docker Hub には、認証なしで取得できる回数に制限があります。検査が取得で失敗するようになったら、認証を足します。
+Docker Hub には、認証なしで取得できる回数に制限があります。CI が取得で失敗するようになったら、認証を足します。
 
 ## 残る危険
 
@@ -260,9 +260,9 @@ Docker Hub には、認証なしで取得できる回数に制限があります
 
 - リポジトリの管理者は、environment の使えるブランチや、ruleset を変えられます。管理者は、App が無くても保護を外せる立場です。管理者を絞ることが対策です
 - 鍵が漏れたときにできることは、上の表のとおりです
-- 配布元で悪意のある patch が公開され、cooldown の日数を過ぎても発覚せず、検査も通ると、自動で入ります。cooldown は発覚までの時間を取るもので、防ぐものではありません
-- セキュリティ更新の patch は、cooldown なしで自動で入ります。対象は、GitHub の脆弱性のデータベースに登録された修正に限られます。検査は通す必要があります。修正のバージョンそのものに悪意のある変更が混ざっていた場合、cooldown による猶予はありません
-- Python と Node のセキュリティの修正を含むバージョンは、外部の公開情報（nodejs.org、OSV、python/cpython）で見分けます。情報が誤っていると、通常のバージョンを待たずに PR にするか、修正のバージョンを見逃します。どちらの場合も、PR のマージには所有者のレビューが要り、見逃したバージョンは 7 日後に通常の更新として出ます
+- 配布元で悪意のある patch が公開され、cooldown の日数を過ぎても発覚せず、CI も通ると、自動で入ります。cooldown は発覚までの時間を取るもので、防ぐものではありません
+- セキュリティアップデートの patch は、cooldown なしで自動で入ります。対象は、GitHub の脆弱性のデータベースに登録された修正に限られます。CI は通す必要があります。修正のバージョンそのものに悪意のある変更が混ざっていた場合、cooldown による猶予はありません
+- Python と Node のセキュリティアップデートは、外部の公開情報（nodejs.org、OSV、python/cpython）で見分けます。情報が誤っていると、通常のバージョンを待たずに PR にするか、修正のバージョンを見逃します。どちらの場合も、PR のマージには所有者のレビューが要り、見逃したバージョンは 7 日後に通常の更新として出ます
 - 人が出した、ロックファイルだけを変える PR は、人の操作では、所有者の承認なしに通りません。通せるのは App だけです。App の判定は Dependabot の PR だけを対象にするので、この経路が開くのは、鍵が漏れたときか、判定に誤りがあるときです
 - 判定の workflow は、GitHub が配る部品（`actions/checkout`）を 1 つ使います。動かすコミットは、workflow のロックファイル（`.github/workflows/actions.lock`）で固定しています
 
