@@ -268,7 +268,8 @@ workflow の `uses:` にはタグ（`actions/checkout@v6.0.3`）を書きます�
 ロックファイルは `gh actions-lock`（GitHub 公式の `gh` の拡張）が作ります。手では編集しません。
 
 `uses:` を足したり変えたりしたときは、`gh actions-lock` を動かして、ロックファイルも一緒にコミットします。
-ロックファイルに無い action を使う workflow は、ランナーが止めます。
+ロックファイルと食い違う `uses:` を書いた workflow は、起動しません。検査の結果が付かないので、その PR はマージできません（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89)、[実行 43686598573](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43686598573)。「This run likely failed because of a workflow file issue.」）。
+Dependabot が action を上げる PR では、ロックファイルの書き換えも Dependabot が行います。人の手作業は要りません（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。
 
 Dependabot は、action を上げる PR で、workflow のファイルとロックファイルの両方を書き換えます。
 ライブラリと違い、patch の更新でも workflow のファイルが変わるので、action の更新は、すべて人が判断します。

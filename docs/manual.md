@@ -26,6 +26,8 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | 待つ期間 | 公開から 7 日たつまで、その版を取り込まない決まり。セキュリティの修正には置かない |
 | 版の正本 | 道具の版を 1 か所に書いたファイル（`.python-version`、`.tool-versions`、`infra/versions.tf`） |
 | 見張り役 | `versions/Dockerfile`。Dependabot に道具の新しい版を見つけさせるためのファイル。組み立てには使わない |
+| GitHub App（App） | この仕組み専用の、機械のアカウントにあたるもの。条件を満たした PR を承認して、マージキューに入れる。人のアカウントではない |
+| 所有者、team | `.github/CODEOWNERS` に書いた、ファイルの責任者。このリポジトリでは、1 つの team（GitHub 上のメンバーの集まり）が、すべてのファイルの所有者になっている |
 
 ## メンバーの手引き
 
@@ -39,6 +41,12 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | Python、Node、uv、Terraform の本体 | 版を正本に写すコミットが自動で足され、`needs-review` ラベルが付く | レビューする |
 | GitHub Actions | 週に 1 本にまとまって出る | レビューする |
 | セキュリティの修正 | 待つ期間なしで出る。扱いは上の行と同じ | patch でテストが通れば、何もしない。それ以外はレビューする |
+
+届く量の目安は、次のとおりです。
+
+- 見る PR は、依存ごとに、新しい minor や major が出た週に 1 本です。道具の本体は、新しい版が出た週に 1 本、GitHub Actions は週に 1 本です
+- 自動で入る PR は、週に最大 14 本です。ロックファイルだけが変わりうる依存の数です
+- 検証の初回は、溜まっていた更新がまとめて出て、見る PR が 17 本になりました。2 週目以降の本数は、測っていません
 
 ### 見る PR の探し方
 
@@ -55,6 +63,11 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 2. Dependabot が PR の本文に付ける、リリースノートと変更の一覧を読む
 3. 検査の結果を見る。落ちていれば、次の節へ進む
 4. 問題が無ければ、Approve して、Merge when ready を押す。マージキューが、最新の main と合わせて検査し直してから入れる
+
+Python や Node の本体の PR で検査が落ちているときは、先に uv の版を見ます。
+新しい Python を、固定している uv がまだ知らないと、`workspace` の job が「No interpreter found for Python ...」で落ちます。uv を上げる PR を先に入れると、通る見込みです（実物では、まだ確かめていません）。
+
+マージキューの中の検査で落ちた PR は、キューから外れて、開いたままになります。自動マージの PR なら、`needs-review` ラベルが付いて人に回る作りです。この動きは、単体テストで確かめただけで、実物では起きていません。
 
 入れない更新は、PR を閉じます。Dependabot は、その版を出し直しません。次の版が出ると、新しい PR が出ます。
 
@@ -79,6 +92,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | workflow が使う action | `uses:` を完全なタグ（`actions/checkout@v6.0.3`）で書き、`gh actions-lock` を動かす。workflow と `.github/workflows/actions.lock` の両方をコミットする |
 
 片方だけを変えた PR は、検査が落とします。正本と見張り役の食い違いは、`python3 automation/versions.py check` で手元でも確かめられます。
+`uses:` を変えて `actions.lock` を直さなかった PR は、workflow が起動しません。検査の結果が付かないので、マージできません。Actions の画面には「This run likely failed because of a workflow file issue.」と出ます（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめました）。`gh actions-lock` を動かして、ロックファイルをコミットすると直ります。
 `gh actions-lock` は、`gh` の拡張です。`gh extension install github/gh-actions-lock --pin v0.4.1` で入れます。
 
 ### 手元の始め方
