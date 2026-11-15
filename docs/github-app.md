@@ -114,7 +114,7 @@ gh api orgs/<組織>/actions/permissions/workflow
 
 このリポジトリで確かめた結果は、[app-request.md](app-request.md) に実行の URL つきで書いています。
 
-- patch のグループで、ロックファイルだけを変える Dependabot の PR を待つ。検査が通ると、App が承認し、`automerge` ラベルが付き、マージキューを通ってマージされる
+- patch の更新で、ロックファイルだけを変える Dependabot の PR を待つ。検査が通ると、App が承認し、`automerge` ラベルが付き、マージキューを通ってマージされる
 - main 以外のブランチに、`environment: automerge` を指定した job を足す。その job は、ブランチが許可されていないという理由で動かない
 - main 以外のブランチに、`GITHUB_TOKEN` で PR を承認する workflow を足す。承認の API は 422 で失敗する
 

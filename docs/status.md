@@ -5,22 +5,23 @@
 
 | 番号 | 状況 | 残っていること |
 |---|---|---|
-| 1 | 満たす | なし |
+| 1 | 満たす | 人の判断待ちの minor の PR が開いた状態で、patch の PR が自動でマージされた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70)、[#79](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/79)、[#85](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/85)、[#87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）。Dependabot の push からマージまで 2〜3 分 |
 | 2 | 満たす | なし |
 | 3 | 満たす | なし |
 | 4 | 満たす | なし |
 | 5 | 満たす | なし |
-| 6 | 満たす | 人が自分の鍵で署名して Dependabot を名乗るコミットは、実物では試していない |
+| 6 | 満たす | 所有者の作り直しのあとも、App はロックファイルだけの PR を、所有者のレビューの免除でマージキューに入れた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70) は 06:01:39 に投入、06:02:31 にマージ。承認は App の 1 件だけ）。人が自分の鍵で署名して Dependabot を名乗るコミットは、実物では試していない |
 | 7 | 一部 | 割り振りの設定は入れた。組織のメンバーが 1 人なので、偏らないことと、人数を変えたときの動きは、実物で確かめていない |
 | 8 | 満たす | なし |
 | 9 | 一部 | 判定と、Python、Node、uv の見分けは入れた。ライブラリのセキュリティ更新が自動でマージされるところは、実物でまだ確かめていない |
 | 10 | 満たす | なし |
 | 11 | 満たす | 「揃う」は、版を書いたファイル（`.python-version`、`.tool-versions`）を、手元の道具、CI、本番のイメージの組み立てが読むことと、手元の版が違うとテストが落ちることを指す。道具で実際に入れるところは試していない。Node のテストが落ちる側は確かめていない |
 | 12 | 満たす | なし |
-| 13 | 満たす | なし |
+| 13 | 満たす | 依存ごとの PR にしたあとの検査の回数は、PR 1 本につき 1 回（README の「PR の本数と検査の回数」）。同じロックファイルの patch が 3 本以上重なった場合は、測れていない |
 | 14 | 満たす | App の鍵の入れ替え、App の停止と削除は、試していない |
 | 15 | 一部 | 無視するための設定は README に示した。GitHub の文書で確かめたもので、実物では試していない。通知の数は、設定からの上限で示した。実測は 2 本ぶん |
 | 16 | 満たす | patch、minor、major の 5 件が、1 本の PR にまとまって出た（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。週 1 本になることは、確認の間隔（週 1 回）からの見込みで、複数の週では見ていない |
+| 17 | 満たす | 種類でまとめるグループをやめた。版が連動する群（vitest と @vitest/coverage-v8）だけをまとめ、2 件が 1 本で出た（[PR #77](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/77)） |
 
 ## 満たしていない要件を妨げているもの
 

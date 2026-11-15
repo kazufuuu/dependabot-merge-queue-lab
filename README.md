@@ -54,18 +54,51 @@ App が所有者のレビューなしで通せるのは、ロックファイル�
 対象から外す指定は、`exempt`（その主体には規則を当てない）です。
 `always`（迂回を許す）では、マージキューに入れる操作が「team の承認待ち」で拒否されました。
 
-### グループ
+### PR のまとめ方
 
-`.github/dependabot.yml` で、更新を semver の種別でグループに分けています。
+PR にまとめるのは、版が連動するライブラリ群だけです。それ以外は、patch も minor も major も、依存ごとに 1 本ずつ出します。
 
-- `patch`: patch の更新。自動マージの対象
-- `dev-minor`: 開発用の依存の minor。リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にすると、自動マージの対象に加わる
-- `minor`: 本番用の依存の minor
-- major はグループに入れず、依存ごとに 1 本ずつ出す
+- まとめている群は、npm の `vitest` と `@vitest/...` です。同じ版でないと動かないので、`.github/dependabot.yml` の `vitest` のグループで一緒に上げます（[PR #77](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/77)。2 件が 1 本にまとまった）
+- 群の PR に patch と minor が混ざったときは、いちばん大きい種別で扱います。minor が 1 つでも入っていれば、人が判断します
+- GitHub Actions だけは例外で、patch、minor、major を 1 本にまとめます。人が判断するためです
 
-セキュリティ更新はグループに入りません。メタデータに種別も書かれません。
+更新の種類（patch、minor）でまとめるグループは、作りません。作ると、自動マージが止まります。
+
+- 種類のグループの PR が開いていると、Dependabot は、そのディレクトリの全部の依存を処理済みとみなし、ほかの更新を出しません
+- minor のグループの PR が人の判断を待っている間、patch の PR が出なくなりました（[実行 43682150672](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43682150672)。ログは「Adding dependencies as handled」「Skipping hashicorp/null in group patch as it has already been handled by a previous group」）。エラーは出ません
+- グループをやめると、minor の PR が開いたままでも、patch の PR が出て、自動でマージされました（[PR #79](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/79)、[PR #85](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/85)、[PR #87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）
+
+開発用の依存の minor を自動マージの対象に足すときは、リポジトリ変数 `AUTOMERGE_DEV_MINOR` を `true` にします。
+振り分けは、グループの名前を見ません。種別と依存の種類を、Dependabot が署名したコミットのメッセージから読みます。
+
+セキュリティ更新のメタデータには、種別が書かれません。
 振り分けは、Dependabot が同じコミットメッセージに書く「from 旧い版 to 新しい版」から種別を求めます。
 数字 3 つの版どうしで、3 つ目だけが上がっているときに patch とみなします。それ以外は人に依頼します。
+
+### 同時に開く PR の上限
+
+`open-pull-requests-limit` は、設定（エコシステムとディレクトリの組）ごとに 10 本です。
+開いている PR が上限に達すると、Dependabot は新しい PR を作りません。patch の PR も出なくなり、自動マージが止まります。
+
+- 実物で確かめました。上限を 3 に下げ、人の判断待ちが 4 本ある状態にすると、patch の PR は作られませんでした。Dependabot の実行は成功し、ログには「created」と出ます（[実行 43684334942](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43684334942)）。エラーは出ません
+- 上限を 10 に戻すと、同じ PR が出て、自動でマージされました（[PR #87](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/87)）
+- 気づき方: 残りが 2 本以下になると、「Dependabot の PR が上限に近づいています」という Issue が 1 件立ちます。`dependabot-merge` の workflow が、毎時、設定ごとの本数を数えています（`automation/dependabot_limit.py`）。本数が減ると、Issue は自動で閉じます
+- 直し方: 人の判断待ちの PR（`needs-review` ラベル）を、マージするか閉じます
+- セキュリティ更新の PR は、別の枠で出る決まりです。このリポジトリでは確かめていません
+
+### PR の本数と検査の回数
+
+種類でまとめるのをやめたあと、Dependabot が 1 回の確認で出した PR は 13 本でした（2026-11-15）。
+
+| 測ったもの | 数字 |
+|---|---|
+| 同時に開いている Dependabot の PR | 16 本（uv の直下 4、`/api` 3、npm 3、Terraform 1、見張り役 4、Actions 1） |
+| 自動でマージされた patch の PR | 3 本。Dependabot の push からマージまで、2 分 47 秒、2 分 47 秒、2 分 11 秒 |
+| 検査の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの検査が 1 回加わる。版の同期がコミットを積む PR は、もう 1 回 |
+| 同じロックファイルを変える PR どうしの衝突 | 起きなかった。`uv.lock` を変える PR が 4 本開いた状態で 1 本が入っても、残りは作り直されず、検査も走り直さなかった |
+
+種類でまとめていたときは、patch の PR はディレクトリごとに 1 本、検査も 1 回でした。依存ごとに出す形では、patch の更新がある依存の数だけ、PR と検査が増えます。
+同じロックファイルの patch が 3 本以上重なった場合は、測れていません。このリポジトリには、同時に patch の更新がある依存が、ロックファイルごとに 1 つしかありませんでした。
 
 ### 振り分け
 
@@ -115,11 +148,11 @@ GitHub の受信箱では、PR 1 本が通知 1 件にまとまります。こ�
 
 | 届く相手 | 理由 | 自動でマージされる PR での数 |
 |---|---|---|
-| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 4 件。セキュリティ更新の patch が出た週は、その本数が加わる |
+| `.github/dependabot.yml` の `assignees` に書いた人 | 担当の割り当て（`assign`） | 週に最大 14 件。セキュリティ更新の patch が出た週は、その本数が加わる |
 | 割り振られたレビュワー | レビューの依頼（`review_requested`） | 同じ。team の中で回るので、1 人あたりは人数で割った数になる |
 
-週に最大 4 件は、設定から出した上限です。patch のグループの PR は、ロックファイルのある設定（uv が 2 つ、npm、Terraform）ごとに、週 1 本までです。
-実測は、2 日間で 2 本（PR #12、PR #34）です。メールの通数は確かめていません。
+週に最大 14 件は、設定から出した上限です。ロックファイルだけが変わりうる依存の数（uv の直下 4、`/api` 4、npm 4、Terraform 2）で、全部に patch の更新が出た週の数です。
+実測は、2 日間で 6 本（PR #12、#34、#70、#79、#85、#87）です。依存ごとの形になってからは、3 本（#79、#85、#87）です。メールの通数は確かめていません。
 
 #### 無視するための設定
 
@@ -132,7 +165,7 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 3. 人が判断する PR は、下の一覧で確かめる
 
 メールで受け取っている人は、メールの振り分けを使えます。通知のメールは、差出人が `notifications@github.com`、`List-Id` がリポジトリごとの値です。
-題名に `the patch group` を含むものを受信トレイから外すと、patch のグループの PR が外れます。
+このリポジトリの通知をまとめて別のフォルダに入れると、受信トレイには届きません。題名では、自動でマージされる PR を区別できません。
 
 1 と 2 の絞り込みは GitHub の文書にある書き方で、実物では試していません。メールの振り分けも試していません。
 
@@ -143,7 +176,7 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 - 自分にレビューが依頼されている PR: `https://github.com/pulls/review-requested`
 - このリポジトリの、人が判断する PR: PR の一覧を `is:open label:needs-review` で絞り込む
 
-検査が落ちた patch は、題名が自動でマージされる PR と同じです。題名で振り分けると一緒に外れるので、一覧で確かめます。
+検査が落ちた patch も、題名の形は自動でマージされる PR と同じです。通知では区別できないので、一覧で確かめます。
 
 ### 検査
 
