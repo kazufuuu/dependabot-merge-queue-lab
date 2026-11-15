@@ -218,9 +218,7 @@ CI が落ちた patch も、題名の形は自動でマージされる PR と同
 
 各 job は、`justfile` のレシピを 1 つ呼びます。job とレシピの名前は同じです。手元でも同じレシピを使うので、手元と CI で、動かすコマンドが食い違いません。
 落ちたときは、落ちた job と同じ名前のレシピ（`uv run just web` など）を手元で動かすと、再現できます。レシピは、動かすコマンドを 1 行ずつログに出すので、どのコマンドで落ちたかも分かります。
-`workspace` と `api` は、手元と同じ `uv run just` で呼びます。Python と uv を、もともと入れる job なので、費用は増えません。
-`web`、`infra`、`automation`、`image` は、Python の環境を使いません。この 4 つは、pipx で just を入れて呼びます。バージョンは `uv.lock` と同じで、`automation/versions.py show` が読みます。かかる時間は、1 つの job につき 3 秒ほどです。
-この 4 つも `uv run just` にすると、Python と uv を入れるぶん、1 つの job につき 8〜10 秒かかりました（[PR #95](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/95) で測りました）。そのため、pipx のままにしています。
+どの job も、手元と同じ `uv run just <レシピ>` で呼びます。just は開発用の依存なので、uv が `uv.lock` のバージョンを入れます。
 
 | job | 内容 | バージョンの読み方 |
 |---|---|---|

@@ -14,15 +14,14 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # テストは runner の上で直接動かす。動かすコマンドは justfile のレシピで、手元と同じものを呼ぶ。
-# workspace と api は、手元と同じ uv run just で呼ぶ。Python と uv を、もともと入れる job なので、費用は増えない。
-# web、infra、automation、image は、Python の環境を使わない。uv run のために Python と uv を入れると、
-# job あたり 8〜10 秒かかる（測った）。pipx で uv.lock と同じバージョンの just を入れると 3 秒なので、こちらにしている。
+# どの job も、手元と同じ uv run just で呼ぶ。just は開発用の依存なので、uv が uv.lock のバージョンを入れる。
 # job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
 # バージョンは管理場所から読む。
 # - Python: .python-version（setup-python が読んで入れる）
 # - Node: .node-version（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
-# - uv、just: uv.lock に入っているバージョン（automation/versions.py が読んで渡す）
+# - uv: uv.lock に入っているバージョン（automation/versions.py が読んで、setup-uv に渡す）
+# - just: uv.lock に入っているバージョン（uv run が入れる）
 # Python は setup-python が入れ、uv には取ってこさせない（UV_PYTHON_DOWNLOADS）。
 # uv は、取ってこられる Python の一覧を自分の中に持つ。古い uv は新しい Python を知らないので、
 # uv に取ってこさせると、Python の patch の更新が、uv のバージョンのせいで落ちる。
@@ -87,9 +86,14 @@ jobs:
           node-version-file: .node-version
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: just を入れる
-        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - run: just web
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          version: ${{ steps.versions.outputs.uv }}
+          enable-cache: true
+      - run: uv run --locked just web
         working-directory: .
 
   infra:
@@ -108,9 +112,14 @@ jobs:
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
-      - name: just を入れる
-        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
-      - run: just infra
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          version: ${{ steps.versions.outputs.uv }}
+          enable-cache: true
+      - run: uv run --locked just infra
         working-directory: .
 
   automation:
@@ -121,10 +130,15 @@ jobs:
       - name: バージョンを管理場所から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - name: just を入れる
-        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          version: ${{ steps.versions.outputs.uv }}
+          enable-cache: true
       - name: 振り分けとバージョンの同期のテスト。バージョンの管理場所と Dependabot 用の Dockerfile が揃っていることも確かめる
-        run: just automation
+        run: uv run --locked just automation
 
   # 本番のイメージがビルドできることを確かめる。起動の確認とテストは、ここでは行わない。
   # runner にはコンパイラがあるが、slim のイメージには無い。テストが通っても、ビルドが落ちる更新がある。
@@ -141,12 +155,17 @@ jobs:
       - name: バージョンを管理場所から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - name: just を入れる
-        run: pipx install "rust-just==${{ steps.versions.outputs.just }}"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          version: ${{ steps.versions.outputs.uv }}
+          enable-cache: true
       - name: API のイメージを管理場所のバージョンでビルドする
         run: |
           docker buildx create --name ci --use >/dev/null
-          just image --builder ci \
+          uv run --locked just image --builder ci \
             --cache-from type=local,src=/tmp/buildcache \
             --cache-to type=local,dest=/tmp/buildcache-new,mode=max
           rm -rf /tmp/buildcache && mv /tmp/buildcache-new /tmp/buildcache
