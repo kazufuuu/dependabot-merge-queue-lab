@@ -38,7 +38,8 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | ライブラリの patch で、ロックファイルだけが変わる | テストが通ると、`automerge` ラベルが付き、2〜3 分で main に入る | 何もしない |
 | ライブラリの patch で、テストが落ちた | `needs-review` ラベルと理由のコメントが付く | レビューする |
 | ライブラリの minor、major | `needs-review` ラベルが付く | レビューする |
-| Python、Node、uv、Terraform の本体 | 版を正本に写すコミットが自動で足され、`needs-review` ラベルが付く | レビューする |
+| Python、Node、Terraform の本体 | 版を正本に写すコミットが自動で足され、`needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
+| uv | ライブラリと同じ。patch は自動で入り、minor は `needs-review` が付く | ライブラリと同じ |
 | GitHub Actions | 週に 1 本にまとまって出る | レビューする |
 | セキュリティの修正 | 待つ期間なしで出る。扱いは上の行と同じ | patch でテストが通れば、何もしない。それ以外はレビューする |
 
@@ -64,8 +65,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 3. 検査の結果を見る。落ちていれば、次の節へ進む
 4. 問題が無ければ、Approve して、Merge when ready を押す。マージキューが、最新の main と合わせて検査し直してから入れる
 
-Python や Node の本体の PR で検査が落ちているときは、先に uv の版を見ます。
-新しい Python を、固定している uv がまだ知らないと、`workspace` の job が「No interpreter found for Python ...」で落ちます。uv を上げる PR を先に入れると、通る見込みです（実物では、まだ確かめていません）。
+Python の patch の PR は、uv の版に関係なく検査が動きます。CI では、Python を setup-python が入れ、uv には取ってこさせないためです。uv を上げないまま Python を 3.13.18 にして、検査が通ることを確かめました（[PR #92](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/92)）。
 
 マージキューの中の検査で落ちた PR は、キューから外れて、開いたままになります。自動マージの PR なら、`needs-review` ラベルが付いて人に回る作りです。この動きは、単体テストで確かめただけで、実物では起きていません。
 
@@ -87,13 +87,42 @@ Python や Node の本体の PR で検査が落ちているときは、先に uv
 
 | 変えたいもの | 手順 |
 |---|---|
-| Python、Node、uv、Terraform の版 | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換え、`python3 automation/versions.py align` を動かす。見張り役が正本に揃う。両方をコミットする |
+| Python、Node、Terraform の版（同じ系列の中） | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換え、`python3 automation/versions.py align` を動かす。見張り役が正本に揃う。両方をコミットする |
+| Python の minor や major、Node の major | 下の「Python と Node の大きい更新」の手順 |
+| uv の minor | `pyproject.toml` の開発用の依存の範囲（`uv>=0.13,<0.14`）を書き換え、`uv lock` を動かす。ふだんは Dependabot が PR を出す |
 | ライブラリの版の範囲 | `pyproject.toml` や `package.json` の範囲を書き換え、ロックファイルを作り直す（`uv lock`、`npm install --package-lock-only`）。両方をコミットする |
 | workflow が使う action | `uses:` を完全なタグ（`actions/checkout@v6.0.3`）で書き、`gh actions-lock` を動かす。workflow と `.github/workflows/actions.lock` の両方をコミットする |
 
 片方だけを変えた PR は、検査が落とします。正本と見張り役の食い違いは、`python3 automation/versions.py check` で手元でも確かめられます。
 `uses:` を変えて `actions.lock` を直さなかった PR は、workflow が起動しません。検査の結果が付かないので、マージできません。Actions の画面には「This run likely failed because of a workflow file issue.」と出ます（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめました）。`gh actions-lock` を動かして、ロックファイルをコミットすると直ります。
 `gh actions-lock` は、`gh` の拡張です。`gh extension install github/gh-actions-lock --pin v0.4.1` で入れます。
+
+### Python と Node の大きい更新
+
+Python の minor や major（3.13 から 3.14 など）と、Node の major（24 から 25 など）は、PR が自動では出ません。人が時期を決めて、次の場所を 1 つの PR で書き換えます。
+
+Python の場合は、次のとおりです。
+
+| 順 | 書き換える場所 | 内容 |
+|---|---|---|
+| 1 | `.python-version` | 新しい版（例: `3.14.9`） |
+| 2 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の `requires-python` | 新しい系列の範囲（例: `>=3.14,<3.15`）。4 か所 |
+| 3 | `pyproject.toml` の `[tool.ruff] target-version` | 例: `py314` |
+| 4 | `versions/Dockerfile` | `python3 automation/versions.py align` が書き換える |
+| 5 | `uv.lock`、`api/uv.lock` | 直下と `api/` で `uv lock` を動かす。ロックファイルが解き直される |
+
+そのあと、手元の始め方にあるコマンドで、lint とテストを動かします。新しい Python に対応していない依存があると、`uv lock` かテストで分かります。
+この手順は、3.13.16 から 3.14.9 へ上げる形で、手元で通しました。lint とテストは通りました。本番のイメージの組み立てと、PR にして検査を通すところは、試していません。
+Dependabot の設定（`.github/dependabot.yml` の `ignore`）は、変えなくて構いません。上げたあとは、新しい系列の patch の PR が出ます。
+
+Node の場合は、次のとおりです。こちらは、通して試していません。
+
+| 順 | 書き換える場所 | 内容 |
+|---|---|---|
+| 1 | `.tool-versions` の `nodejs` の行 | 新しい版 |
+| 2 | `web/package.json` の `engines.node` | 新しい系列の範囲（例: `>=25 <26`）。`web/.npmrc` の `engine-strict` があるので、範囲が違うと `npm ci` が止まる |
+| 3 | `versions/Dockerfile` | `python3 automation/versions.py align` が書き換える |
+| 4 | `web/package-lock.json` | `web/` で `npm install --package-lock-only` を動かす |
 
 ### 手元の始め方
 
@@ -102,10 +131,12 @@ Python や Node の本体の PR で検査が落ちているときは、先に uv
 | 道具 | 版のあるファイル | このファイルを読む道具の例 |
 |---|---|---|
 | Python | `.python-version` | uv、pyenv、mise、asdf |
-| Node と uv | `.tool-versions` | mise、asdf |
+| Node | `.tool-versions` | mise、asdf |
+| uv | 決まった版は無い | 入れ方は自由 |
 | Terraform | `infra/versions.tf` の `required_version` | terraform 自身 |
 
 Python は、uv が `.python-version` の版を取得するので、入れなくて構いません。
+手元の uv は、古すぎなければ構いません。下限（0.13）より古いと、uv が止まって知らせます。新しい Python が入らないとき（「No interpreter found for Python ...」）は、`uv self update` で uv を更新します。古い uv は、新しい Python をまだ知らないためです。
 版を管理する道具を使わない場合の入れ方は、README の「手元の始め方」にあります。
 
 ```sh
@@ -117,10 +148,10 @@ python3 -m unittest discover -s automation                              # 仕組
 scripts/build-api.sh -t api                                             # 本番のイメージ
 ```
 
-手元の Python、uv、Node の版が正本と違うと、テストが落ちて知らせます。
+手元の Python と Node の版が正本と違うと、テストが落ちて知らせます。uv の版は照合しません。
 
 確かめたのは、mise がファイルから版を読むところまでです。それぞれの道具で実際に入れるところは、試していません。
-Python と uv の版がずれたときにテストが落ちることは、確かめました。Node の側は確かめていません。
+Python の版がずれたときにテストが落ちることは、確かめました。Node の側は確かめていません。
 
 ### 通知の減らし方
 
@@ -153,7 +184,7 @@ Python と uv の版がずれたときにテストが落ちることは、確か
 | `.github/workflows/dependabot-merge.yml` と `automation/dependabot_merge.py` | PR の振り分けと、自動マージ |
 | `automation/dependabot_limit.py` | 開いている PR が上限に近づいたら、Issue で知らせる |
 | `.github/workflows/version-sync.yml` と `automation/version_sync.py` | 見張り役の版を、正本へ写す |
-| `.github/workflows/security-release.yml` と `automation/security_release.py` | Python、Node、uv のセキュリティの修正を含む版を見つけ、待たずに PR を出す |
+| `.github/workflows/security-release.yml` と `automation/security_release.py` | Python と Node のセキュリティの修正を含む版を見つけ、待たずに PR を出す。Python と Node は別の PR |
 | `automation/versions.py` | 版の正本と見張り役を読み、揃っていることを確かめる |
 | `.github/workflows/dependabot-stats.yml` | Dependabot の PR の本数を、週に 1 回数える |
 | `.github/workflows/actions.lock` | workflow が使う action を、コミットで固定する |
@@ -172,7 +203,7 @@ Python と uv の版がずれたときにテストが落ちることは、確か
 | 待つ期間 | `.github/dependabot.yml` の `cooldown` の `default-days` |
 | 同時に開く PR の上限 | `.github/dependabot.yml` の `open-pull-requests-limit` |
 | まとめるライブラリ群 | `.github/dependabot.yml` の `groups` に、名前の並び（`patterns`）で足す。更新の種類ではまとめない |
-| 更新の対象 | `.github/dependabot.yml` に設定を足す。道具の本体は、見張り役の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す |
+| 更新の対象 | `.github/dependabot.yml` に設定を足す。道具の本体は、見張り役の `versions/Dockerfile` に `FROM` を足し、`automation/versions.py` に読み方を足す。出す更新の範囲（patch だけ、など）は、`ignore` で決める |
 | ロックファイルの種類 | `automation/policy.json` の `lockfiles` に足し、`settings/apply.sh` を動かす |
 
 `settings/apply.sh` は、組織の所有者で、リポジトリの管理者でもある人が動かします。
@@ -193,7 +224,8 @@ PR に人が回った理由は、その PR のコメントにも書いてあり�
 | Dependabot の uv の更新が失敗する | `requires-python` や `required-version` を 1 点に固定している | 範囲で書く。版の固定は、正本のファイルで行う |
 | action の patch と minor の更新が出ない | `uses:` を major だけのタグ（`@v6`）で書いている | 完全なタグ（`@v6.0.3`）で書く |
 | App が承認したのに「レビューが必要」のまま | App 自身が最後に push した PR は、App の承認では通らない | 人が承認する。Python と Node の本体の PR は、この形になる |
-| 新しい Python の版の PR で、検査が落ちる | 固定した uv が、その Python をまだ知らない | uv を先に上げる |
+| 手元で「No interpreter found for Python ...」と出る | 手元の uv が古く、その Python をまだ知らない | `uv self update` で uv を更新する。CI では起きない（Python は setup-python が入れる） |
+| セキュリティの警告があるのに、修正の PR が出ない。エラーも無い | 分かっていない。同じパッケージの警告が 2 つのディレクトリにあり、片方にだけ PR が出た | 警告の画面の「Create Dependabot security update」を押す。この検証では、押しても PR は出なかった。出ないときは、通常の更新の PR で上げる |
 | Dependabot が PR を作り直さない | `@dependabot recreate` は、設定が変わった PR には効かない | PR を閉じる。確認を起こすには、`.github/dependabot.yml` の設定を変える。コメントだけの変更では起きない |
 | main に push できない | ruleset が、PR とレビューと検査を求めている | PR を出す。人が 1 人の組織では、自分の PR を承認できない |
 
