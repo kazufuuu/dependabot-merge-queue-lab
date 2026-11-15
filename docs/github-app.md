@@ -36,6 +36,7 @@ App に承認させると、承認できるのは鍵を使える workflow だけ
 4. スクリプトが、App ID を environment の変数 `AUTOMERGE_APP_ID` に、秘密鍵を secret `AUTOMERGE_APP_PRIVATE_KEY` に登録する
 5. スクリプトが表示する install の URL を開く。Only select repositories を選び、対象のリポジトリだけを選んで install する
 6. スクリプトが install を確かめ、対象のリポジトリと権限を表示して終わる
+7. `settings/apply.sh <owner>/<repo>` をもう一度動かす。ロックファイルの所有者のレビューを、App にだけ求めない設定が入る。App を作る前の 1 回目では、この設定は入らない
 
 スクリプトがしていることは次のとおりです。
 
@@ -142,7 +143,7 @@ gh workflow disable dependabot-merge --repo <owner>/<repo>
 1. 組織の Settings、GitHub Apps で、App を Uninstall する
 2. environment `automerge` の変数と secret を消す
 
-App を外すと、自動マージは止まります。Dependabot の PR へのラベルとレビュー依頼は、`GITHUB_TOKEN` で続きます。
+App を外すと、自動マージは止まります。Dependabot の PR へのラベルは、`GITHUB_TOKEN` で続きます。レビューの依頼は、GitHub が CODEOWNERS から付けます。
 
 ### 設定を変えられる人
 

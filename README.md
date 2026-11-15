@@ -10,12 +10,12 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 更新 | 変わるファイル | 扱い |
 |---|---|---|
 | 範囲の中の patch | ロックファイルだけ | 検査が通れば自動で承認し、マージキューに入れる |
-| 範囲の中の minor | ロックファイルだけ | 人に依頼する。誰か 1 名の承認で通る |
+| 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
 | ランタイムと道具の版（Python、Node、Terraform） | 見張り役の Dockerfile。workflow が正本の変更を積む | 人に依頼する。所有者の承認が要る |
 | 固定した版（Actions、uv や ruff などの `==`） | 版を書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティ更新 | 更新による | 人に依頼する。待機なしで、依存ごとに出る |
-| 検査が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する |
+| 検査が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する。所有者の承認が要る |
 
 自動マージの条件は、semver の種別と、変わるファイルの 2 つです。
 グループが patch で、変わるファイルがロックファイルだけのときに限って、自動でマージします。
@@ -33,8 +33,23 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 
 ### 所有者
 
-`.github/CODEOWNERS` で、ロックファイルだけを所有者なしにしています。
-ruleset は所有者のレビューを必須にしているので、workflow の承認で通るのは、ロックファイルだけを変える PR に限られます。
+`.github/CODEOWNERS` で、すべてのファイルに所有者（team `kazufuuu/reviewers`）を付けています。
+所有者のレビューは、ruleset の 2 つの規則で必須にしています。
+
+| ruleset | 対象のファイル | 対象から外す主体 |
+|---|---|---|
+| `owners-lockfiles` | ロックファイル（`uv.lock`、`package-lock.json`、`.terraform.lock.hcl`） | 自動マージの App |
+| `owners-others` | ロックファイル以外の全部 | なし |
+
+App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られます。
+人が出した PR は、ロックファイルだけの変更でも、所有者の承認が要ります。
+必須の検査、マージキュー、承認 1 件の規則（`main`）には、対象から外す主体がいません。App もこの 3 つを通します。
+
+歯止めは 2 段あります。1 段目は振り分けの判定で、変わったファイルがロックファイルだけであることを確かめます。
+2 段目は上の ruleset で、判定を通さずに App のトークンを直接使っても、GitHub が拒否します。
+
+対象から外す指定は、`exempt`（その主体には規則を当てない）です。
+`always`（迂回を許す）では、マージキューに入れる操作が「team の承認待ち」で拒否されました。
 
 ### グループ
 
@@ -55,7 +70,7 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 - 判定は main の版で動きます。PR の中身は実行しません
 - 種別は、Dependabot がコミットメッセージに書くメタデータで判定します
 - コミットが GitHub 自身の鍵で署名されていることと、その head を push したのが Dependabot であることを確かめます。作者の欄は自由に書けるので、判断に使いません
-- 人が見る PR には、`needs-review` ラベルと理由のコメントを付け、レビューを依頼します
+- 人が見る PR には、`needs-review` ラベルと理由のコメントを付けます。レビューの依頼は、GitHub が CODEOWNERS から付けます
 - 自動マージする PR には、検査が通ったあとで承認を付け、`automerge` ラベルを付けて、マージキューに入れます
 - マージキューの検査で外された PR も、人に依頼します
 
@@ -69,9 +84,9 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 
 人が見る PR には、レビュワーを 1 人だけ付けます。所有者の全員には依頼しません。
 
-- CODEOWNERS の所有者は team（`kazufuuu/reviewers`）です。所有者のいるファイルを変える PR には、GitHub が team に依頼を付けます
+- CODEOWNERS の所有者は team（`kazufuuu/reviewers`）です。すべてのファイルに所有者がいるので、どの PR にも GitHub が team への依頼を付けます
 - team の code review assignment が、依頼を team の中の 1 人に割り振ります。方式は load balance（直近の依頼が少ない人に回す）です。team の全員には通知しません
-- 所有者のいないファイルだけを変える PR（ロックファイルだけの minor、検査が落ちた patch）には、振り分けが依頼します。`GITHUB_TOKEN` から team への依頼は 422 で拒否されるので、`automation/policy.json` の `reviewers` に書いた人に、PR の番号の順で回します
+- 自動でマージされる patch の PR にも、開いた時点で依頼が付きます。数分でマージされるので、レビュワーは何もしなくて構いません
 - 休みの人は、GitHub のステータスを Busy にすると、割り振りから外れます。team の設定画面の Code review で、外す人を指定することもできます
 
 人数と承認の数は、別の設定です。
@@ -80,7 +95,7 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 |---|---|
 | 割り振る人数 | `automation/policy.json` の `review_count`。`settings/apply.sh` が team の設定に反映する |
 | マージに要る承認の数 | `settings/ruleset.json` の `required_approving_review_count` |
-| 所有者を増やす、減らす | team のメンバーを変える。`reviewers` の一覧も合わせる |
+| 所有者を増やす、減らす | team のメンバーを変える |
 
 2 人に割り振っても、承認の数が 1 のままなら、どちらか 1 人の承認で通ります。
 
@@ -96,9 +111,9 @@ CI が終わったとき、毎時、手動の 3 通りで動きます。判定�
 | `web` | 型検査とテスト | setup-node が `web/.node-version` を読む |
 | `infra` | Terraform の書式、検証、テスト | `automation/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
 | `automation` | 振り分けと版の同期のテスト、版が揃っていることの確認 | runner の Python |
-| `image` | API のイメージの組み立てと起動の確認 | `scripts/build-api.sh` が正本から読み、ビルドの引数で渡す |
+| `image` | API のイメージの組み立て | `scripts/build-api.sh` が正本から読み、ビルドの引数で渡す |
 
-`image` は、テストを動かしません。依存を入れてイメージを組み立て、起動を確かめるだけです。
+`image` は、テストを動かしません。依存を入れてイメージを組み立てるだけです。組み立てたイメージの起動は確かめません。
 runner にはコンパイラが入っていますが、slim のイメージには入っていません。テストが通っても、イメージの組み立てが落ちる更新があるので、毎回確かめます。組み立ての層はキャッシュします。
 必須の検査は、全部の結果をまとめた `all-green` の 1 つです。テストとイメージの組み立ての、どれか 1 つでも落ちると、自動マージされません。
 マージキューでは、最新の main と合わせた状態で同じ検査が動きます。ブランチが古くても止まりません。
@@ -195,7 +210,7 @@ Python のセキュリティリリースが main に入るまでの見込みは�
 
 公式イメージの patch を、人を待たずにマージする切り替え（`AUTOMERGE_RUNTIME_PATCH`）も実装しています。ただし、今の構成では働きません。
 試したところ、App が承認しても「レビューが必要」のままでした。写しのコミットを push したのが App 自身で、ruleset が「最後に push した本人以外の承認」を求めるためです。
-働かせるには、写す App と承認する App を分けます。既定は無効です。
+働かせるには、写す App と承認する App を分けます。そのうえで、`owners-lockfiles` の対象に、見張り役と正本のファイルを足します。既定は無効です。
 
 ## 手元の始め方
 
@@ -226,7 +241,12 @@ uv は、`pyproject.toml` の `uv==` を書き換えて `uv lock` を動かし�
 ## 設定の反映
 
 `settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。
-ruleset は、main の保護（`settings/ruleset.json`）と、タグの保護（`settings/ruleset-tags.json`）の 2 つです。
+ruleset は 4 つです。
+
+- `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須の検査、マージキュー
+- `owners-lockfiles` と `owners-others`: 所有者のレビュー。`settings/owner_rulesets.py` が、`automation/policy.json` のロックファイルの名前、team、App から作る
+- `tags`: タグの保護（`settings/ruleset-tags.json`）
+
 GitHub App は `settings/create-app.py` で用意します。手順は [docs/github-app.md](docs/github-app.md) にあります。
 App の作成をほかの部門に頼むときの依頼書は [docs/app-request.md](docs/app-request.md) です。
 
@@ -242,4 +262,5 @@ App の作成をほかの部門に頼むときの依頼書は [docs/app-request.
 - Dependabot は、依存ごとに最新の版だけを提案します。範囲を超える版が出ている依存では、範囲の中の patch は提案されません
 - uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります
 - 人が 1 人だけの組織では、ruleset を入れたあとに main を変える手段がありません。自分の PR を自分で承認できないためです。この検証では、main の変更のたびに ruleset を一時的に無効にしました
-- App は CODEOWNERS の所有者になれません。App の承認で通るのは、所有者のいないロックファイルだけを変える PR です
+- App は CODEOWNERS の所有者になれません。App が通せるのは、ロックファイルだけを変える PR です。ロックファイルの所有者のレビューを、App にだけ求めない設定にしています
+- 自動でマージされる patch の PR でも、レビュワーに依頼の通知が届きます。CODEOWNERS の依頼は PR を開いた時点で付くので、止められません

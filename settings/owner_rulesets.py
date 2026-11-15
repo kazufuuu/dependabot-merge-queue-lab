@@ -22,9 +22,10 @@ from pathlib import Path
 POLICY = Path(__file__).resolve().parent.parent / "automation" / "policy.json"
 
 
-def gh_id(path: str) -> int:
-    out = subprocess.run(["gh", "api", path, "--jq", ".id"], capture_output=True, text=True, check=True).stdout
-    return int(out)
+def gh_id(path: str) -> int | None:
+    """ID を返す。見つからなければ None。"""
+    result = subprocess.run(["gh", "api", path, "--jq", ".id"], capture_output=True, text=True, check=False)
+    return int(result.stdout) if result.returncode == 0 else None
 
 
 def ruleset(name: str, team_id: int, patterns: list[str], exempt_app: int | None) -> dict:
@@ -68,7 +69,14 @@ def main() -> int:
     policy = json.loads(POLICY.read_text())
     owner = repo.split("/")[0]
     team_id = gh_id(f"orgs/{owner}/teams/{policy['review_team']}")
-    app_id = gh_id("apps/" + policy["sync_app"].removesuffix("[bot]"))
+    if team_id is None:
+        print(f"team {policy['review_team']} が見つかりません", file=sys.stderr)
+        return 1
+    app = policy["sync_app"].removesuffix("[bot]")
+    app_id = gh_id(f"apps/{app}")
+    if app_id is None:
+        # App を作る前でも、保護は先に入れる。作ったあとで、もう一度動かす。
+        print(f"App {app} がまだありません。対象から外す主体なしで作ります", file=sys.stderr)
     locks = lockfile_patterns(policy["lockfiles"])
     files = {
         "ruleset-owners-lockfiles.json": ruleset("owners-lockfiles", team_id, locks, app_id),

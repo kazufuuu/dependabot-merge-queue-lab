@@ -3,7 +3,7 @@
 情報システム部門の担当者に、GitHub App の作成を依頼するための文書です。
 開発の文脈を知らなくても読めるように書いています。作業の手順は [github-app.md](github-app.md) にあります。
 
-この文書の実例は、検証用の組織 `kazufuuu` のリポジトリ `dependabot-merge-queue-lab` で、2026-11-14 に確かめたものです。
+この文書の実例は、検証用の組織 `kazufuuu` のリポジトリ `dependabot-merge-queue-lab` で、2026-11-14 と 11-15 に確かめたものです。
 
 ## 依頼の要点
 
@@ -109,7 +109,7 @@ App のトークンを使うのは、リポジトリの workflow `dependabot-mer
 App がしないことは次のとおりです。
 
 - 人が出した PR を承認しない
-- ロックファイル以外が変わる PR を承認しない。ロックファイル以外には所有者（CODEOWNERS）がいて、所有者のレビューが必須だからです。App は所有者になれません
+- ロックファイル以外が変わる PR を承認しない。承認しても通りません。ロックファイル以外には所有者のレビューが必須で、App は所有者になれないからです
 - 検査が落ちた PR を承認しない
 - main に直接 push しない。main への変更は、PR とマージキューを必ず通ります
 
@@ -119,7 +119,7 @@ App がしないことは次のとおりです。
 |---|---|
 | 判定は main に入っている版で動く | PR の中身で判定を書き換えられない。判定を変えるには、所有者のレビューを通す必要がある |
 | 鍵は environment `automerge` の secret に置く。この environment は main だけが使える | main 以外のブランチの workflow は、鍵を読めない |
-| ブランチ保護（ruleset）で、所有者のレビューを必須にする | App の承認だけで通るのは、所有者のいないロックファイルだけを変える PR に限られる |
+| ブランチ保護（ruleset）で、すべてのファイルに所有者のレビューを必須にする。ロックファイルの規則だけ、App を対象から外す | App が所有者のレビューなしで通せるのは、ロックファイルだけを変える PR に限られる。人が出した PR は、ロックファイルだけでも所有者の承認が要る |
 | 必須の検査は、全部のテストをまとめた 1 つ | テストの一部だけが動いて通る、ということが起きない |
 | マージキューで、最新の main と合わせて検査し直す | 単独では通るが、合わせると壊れる変更が入らない |
 
@@ -142,6 +142,10 @@ App がしないことは次のとおりです。
 | 本物の Dependabot のコミットを、人が push し直す | 対象から外れる。「head を push したのが Dependabot ではありません: dependabot[bot], kazufusa」 | [実行 43611286487](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43611286487) |
 | 検査が落ちる patch の更新 | 承認されない。`needs-review` ラベルが付き、人に依頼が回る | [PR #16](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/16) |
 | セキュリティ更新 | 承認されない。人に依頼が回る | [PR #10](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/10) |
+| App のトークンを直接使い、ロックファイル以外を変える PR を承認して、マージキューに入れる。直接のマージも試す（判定を通さない。鍵が漏れた場合の再現） | どちらも拒否。「Waiting on required approvals from 1 team.」 | [実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)、[PR #54](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/54) |
+| App のトークンを直接使い、検査が落ちているロックファイルだけの PR を、マージキューに入れる | 拒否。「Required status check "all-green" is failing.」 | 同じ実行、[PR #41](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/41) |
+| 人が出したロックファイルだけの PR を、App の承認だけで、人がマージキューに入れる | 拒否。「Waiting on required approvals from kazufuuu/reviewers.」 | [PR #55](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/55)。App の承認は付いている |
+| App のトークンを直接使い、ロックファイルとそれ以外の両方を変える PR を通す | 拒否。「Waiting on required approvals from 1 team.」 | [実行 43675757390](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43675757390)、[PR #53](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/53)（試験用のブランチ `lab-base` で確かめた） |
 
 試していない偽装が 2 つあります。
 
@@ -180,9 +184,9 @@ App がしないことは次のとおりです。
 
 | できること | 止めるもの | 確かめたか |
 |---|---|---|
-| PR の承認 | ロックファイル以外には所有者のレビューが要る。App は所有者になれない。App が出した PR を App 自身は承認できない | 所有者の要る PR が App の承認で通らないことは、試していない |
-| main へのマージ | ruleset。PR、承認、所有者のレビュー、検査、マージキューを通す必要がある | App によるマージは、条件を満たした PR で確かめた |
-| main への直接の push、main の削除 | ruleset。迂回できる主体は登録していない | 人のアカウントで、push が拒否されることを確かめた。App では試していない |
+| PR の承認 | ロックファイル以外には所有者のレビューが要る。App は所有者になれない。App が出した PR を App 自身は承認できない | ロックファイル以外を変える PR が、App の承認では通らないことを確かめた（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
+| main へのマージ | ruleset。PR、承認、検査、マージキューを通す必要がある。ロックファイル以外には、所有者のレビューも要る | 検査が落ちた PR と、ロックファイル以外を変える PR は、マージキューにも直接のマージにも拒否された（[実行 43676254642](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676254642)） |
+| main への直接の push、main の削除 | ruleset `main`。対象から外す主体は登録していない | 人のアカウントで、push が拒否されることを確かめた。App では試していない |
 | main 以外のブランチへの push、作成、削除 | 止めない | 試していない |
 | タグの作成、更新、削除。リリースの作成 | タグの ruleset（`settings/ruleset-tags.json`）。管理者だけがタグを作れる | ruleset は入れた。App で拒否されることは試していない |
 | workflow のファイル（`.github/workflows/`）の変更 | App に Workflows の権限が無い | 試していない |
@@ -193,29 +197,25 @@ App がしないことは次のとおりです。
 
 - main 以外のブランチに push できても、main に入れるにはレビューと検査が要ります
 - Dependabot の PR のブランチに push すると、その PR は自動マージの対象から外れます（条件 4）
-- 人が出した、ロックファイルだけを変える PR は、鍵の持ち主が App で承認すると通ります。書き込み権限のある人と鍵の持ち主が組むと、ロックファイルの変更を人のレビューなしで入れられます。検査は通す必要があります
+- 人が出した、ロックファイルだけを変える PR は、鍵の持ち主が App で承認し、App でマージキューに入れると通ります。書き込み権限のある人と鍵の持ち主が組むと、ロックファイルの変更を人のレビューなしで入れられます。検査は通す必要があります。App がこの形の PR をキューに入れられることは、実物で確かめました（[実行 43676422072](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43676422072)。キューからは、マージの前に外しました）
 - main 以外のブランチやタグから配布や公開をしているリポジトリでは、そのブランチとタグにも ruleset が要ります
 
 漏れに気づいたときは、App の設定画面で鍵を消します。消した鍵は、その時点で使えなくなります。
 
 ## リポジトリを増やすとき
 
-2 つの案があります。どちらにするかは決めていません。
-
-| 案 | 得 | 失 |
-|---|---|---|
-| リポジトリごとに App を分ける | 鍵が漏れても、影響は 1 つのリポジトリにとどまる。止めるときも 1 つだけ止められる | App と鍵の数が増え、作り直しの手間が増える |
-| 1 つの App を使い回す | App と鍵の管理が 1 か所で済む。作り直しも 1 回 | 同じ鍵を複数のリポジトリの secret に置く。1 か所から漏れると、install 先の全部に効く |
-
-使い回す場合も、install 先は「Only select repositories」で 1 つずつ足します。
+リポジトリを増やす予定はありません。App を分けるか、使い回すかは、検討していません。
 
 ## 検証で行った保護の一時解除
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、ruleset を無効にし、push し、すぐ有効に戻しました。回数は 15 回です（2026-11-14）。無効の時間は、それぞれ数秒です。
+そのため、main の変更のたびに、ruleset `main` を無効にし、push し、すぐ有効に戻しました。回数は __COUNT__ 回です（2026-11-14 と 11-15）。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
-人が 2 人以上いる組織では、この操作は要りません。ruleset に迂回できる主体は登録していません。
+人が 2 人以上いる組織では、この操作は要りません。
+
+ruleset の対象から外す主体は、1 つだけ登録しています。`owners-lockfiles`（ロックファイルの所有者のレビュー）に、自動マージの App です。
+`main`（PR、承認、検査、マージキュー）と `owners-others`（ロックファイル以外の所有者のレビュー）には、登録していません。
 
 ## 待機の効く範囲
 
@@ -251,7 +251,7 @@ Docker Hub には、認証なしで取得できる回数に制限があります
 - リポジトリの管理者は、environment の使えるブランチや、ruleset を変えられます。管理者は、App が無くても保護を外せる立場です。管理者を絞ることが対策です
 - 鍵が漏れたときにできることは、上の表のとおりです
 - 配布元で悪意のある patch が公開され、待機の日数を過ぎても発覚せず、検査も通ると、自動で入ります。待機は発覚までの時間を取るもので、防ぐものではありません
-- 人が出した、ロックファイルだけを変える PR は、ruleset の上では、所有者ではない誰か 1 名の承認で通ります。ロックファイルを所有者なしにしたことの帰結です。実物では試していません
+- 人が出した、ロックファイルだけを変える PR は、人の操作では、所有者の承認なしに通りません。通せるのは App だけです。App の判定は Dependabot の PR だけを対象にするので、この経路が開くのは、鍵が漏れたときか、判定に誤りがあるときです
 - 判定の workflow は、GitHub が配る部品（`actions/checkout`）を 1 つ使います。版はコミットの値で固定しています
 
 悪意のある更新が入ったと分かったときの手順は次のとおりです。
