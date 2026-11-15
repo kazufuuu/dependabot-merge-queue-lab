@@ -121,27 +121,38 @@ def push(repo: str, payload: dict) -> None:
     branch = json.loads(gh("api", f"repos/{repo}/pulls/{number}"))["head"]["ref"]
 
     token = app_token(repo, os.environ["AUTOMERGE_APP_ID"], os.environ["AUTOMERGE_APP_PRIVATE_KEY"])
+    commit = create_commit(repo, token, head, files, COMMIT_MESSAGE)
+    # force を付けない。ブランチが進んでいたら失敗する。
+    app_api(repo, token, f"git/refs/heads/{branch}", {"sha": commit, "force": False}, method="PATCH")
+    print(f"#{number}: {commit[:7]} を積みました（{sorted(files)}）")
 
-    def api(path: str, body: dict, method: str = "POST") -> dict:
-        result = subprocess.run(
-            ["gh", "api", "-X", method, f"repos/{repo}/{path}", "--input", "-"],
-            input=json.dumps(body), capture_output=True, text=True, check=False,
-            env={**os.environ, "GH_TOKEN": token},
-        )  # fmt: skip
-        if result.returncode != 0:
-            raise SyncError(f"{method} {path}: {result.stderr.strip()}")
-        return json.loads(result.stdout)
 
+def app_api(repo: str, token: str, path: str, body: dict, method: str = "POST") -> dict:
+    """App のトークンで GitHub の API を呼ぶ。"""
+    result = subprocess.run(
+        ["gh", "api", "-X", method, f"repos/{repo}/{path}", "--input", "-"],
+        input=json.dumps(body), capture_output=True, text=True, check=False,
+        env={**os.environ, "GH_TOKEN": token},
+    )  # fmt: skip
+    if result.returncode != 0:
+        raise SyncError(f"{method} {path}: {result.stderr.strip()}")
+    return json.loads(result.stdout)
+
+
+def create_commit(repo: str, token: str, parent: str, files: dict[str, str], message: str) -> str:
+    """parent の上に、files の内容のコミットを作る。ブランチは動かさない。"""
     tree = [
-        {"path": path, "mode": "100644", "type": "blob", "sha": api("git/blobs", {"content": content})["sha"]}
+        {
+            "path": path,
+            "mode": "100644",
+            "type": "blob",
+            "sha": app_api(repo, token, "git/blobs", {"content": content})["sha"],
+        }
         for path, content in sorted(files.items())
     ]
-    base_tree = json.loads(gh("api", f"repos/{repo}/git/commits/{head}"))["tree"]["sha"]
-    new_tree = api("git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
-    commit = api("git/commits", {"message": COMMIT_MESSAGE, "tree": new_tree, "parents": [head]})["sha"]
-    # force を付けない。ブランチが進んでいたら失敗する。
-    api(f"git/refs/heads/{branch}", {"sha": commit, "force": False}, method="PATCH")
-    print(f"#{number}: {commit[:7]} を積みました（{sorted(files)}）")
+    base_tree = json.loads(gh("api", f"repos/{repo}/git/commits/{parent}"))["tree"]["sha"]
+    new_tree = app_api(repo, token, "git/trees", {"base_tree": base_tree, "tree": tree})["sha"]
+    return app_api(repo, token, "git/commits", {"message": message, "tree": new_tree, "parents": [parent]})["sha"]
 
 
 def report_failure(repo: str, number: str, error: Exception) -> None:

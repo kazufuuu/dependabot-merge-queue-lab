@@ -164,6 +164,23 @@ def align(root: Path) -> list[str]:
     return changed
 
 
+def set_version(root: Path, name: str, version: str) -> list[str]:
+    """正本と見張り役の両方を、指定の版にする。書き換えたファイルを返す。"""
+    if not re.fullmatch(VERSION, version):
+        raise VersionError(f"{name}: 版の形が違います: {version}")
+    path = SOURCES[name]
+    file = root / path
+    text = file.read_text()
+    match = one(PATTERNS[name], text, path)
+    changed: list[str] = []
+    if match.group(1) != version:
+        file.write_text(text[: match.start(1)] + version + text[match.end(1) :])
+        changed.append(path)
+    if name in IMAGES and align(root):
+        changed.append(SENTINEL)
+    return changed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("show", "check", "sync", "align"))
