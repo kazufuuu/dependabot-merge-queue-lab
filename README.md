@@ -3,6 +3,7 @@
 Dependabot の更新を、人の手間を抑えながら安全に取り込む運用の実物です。
 patch の更新はテストが通れば自動でマージし、それ以外は人に依頼します。
 
+使い方は [docs/manual.md](docs/manual.md) にあります。メンバーが行うことと、仕組みを保つ人が行うことを、手順で書いています。
 要件の一覧は [docs/requirements.md](docs/requirements.md) にあります。
 要件ごとの達成の状況は [docs/status.md](docs/status.md) にあります。
 
