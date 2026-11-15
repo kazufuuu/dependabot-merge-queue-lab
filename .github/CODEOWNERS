@@ -1,16 +1,2 @@
-# すべてのファイルに所有者を付ける。所有者は team にする。
-# team の code review assignment が、レビューの依頼を team の中の決めた人数に割り振る。
+# 試験用。すべてのファイルに所有者を付ける。
 * @kazufuuu/reviewers
-
-# ロックファイルには所有者を付けない。
-# 版の範囲の中に収まる更新はロックファイルだけを変えるので、所有者のレビューなしで通せる。
-# 範囲を超える更新は manifest も変えるので、所有者のレビューが要る。
-uv.lock
-package-lock.json
-.terraform.lock.hcl
-
-# Python と Node の公式イメージの patch を自動マージする切り替え（AUTOMERGE_RUNTIME_PATCH）を
-# 使うときだけ、次の 3 行の # を外す。所有者なしにしないと、App の承認では通らない。
-# versions/Dockerfile
-# .python-version
-# web/.node-version
