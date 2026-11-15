@@ -16,7 +16,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | Python の本体 | `.python-version` |
 | Node の本体 | `.tool-versions` |
 | Terraform の本体 | `infra/versions.tf` の `required_version` |
-| uv | 直下の `pyproject.toml` → `uv.lock` |
+| uv、just（タスクランナー） | 直下の `pyproject.toml` → `uv.lock` |
 | Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
 | npm のライブラリ | `web/package.json` → `web/package-lock.json` |
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers` → `infra/.terraform.lock.hcl` |
@@ -32,7 +32,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
 | Python、Node、Terraform の本体の版 | 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）と、見張り役の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
-| uv | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
+| uv、just | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
 | Python と Node の、セキュリティの修正を含む版 | 正本と、見張り役の `versions/Dockerfile` | 待つ期間なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定した版（Actions の `uses:`、`==` で書いた依存） | 版を書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティ更新 | 更新による | 待つ期間なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、検査が通れば自動でマージする |
@@ -216,6 +216,10 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 `.github/workflows/ci.yml` は、テストを runner の上で直接動かします。docker の中では動かしません。
 依存はキャッシュします（uv は setup-uv、npm は setup-node）。
 
+各 job は、`justfile` のレシピを 1 つ呼びます。job とレシピの名前は同じです。手元でも同じレシピを使うので、手元と CI で、動かすコマンドが食い違いません。
+落ちたときは、落ちた job と同じ名前のレシピ（`just web` など）を手元で動かすと、再現できます。レシピは、動かすコマンドを 1 行ずつログに出すので、どのコマンドで落ちたかも分かります。
+just は、各 job が pipx で入れます。版は、`automation/versions.py show` が `uv.lock` から読みます。かかる時間は、1 つの job につき 3 秒ほどです（[PR #94](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/94) で測りました）。
+
 | job | 内容 | 版の読み方 |
 |---|---|---|
 | `workspace` | workspace の lint とテスト | setup-python が `.python-version` の Python を入れる。`automation/versions.py show` が `uv.lock` から uv の版を読み、setup-uv に渡す |
@@ -305,7 +309,7 @@ workflow が使う action は、GitHub の workflow のロックファイル（`
 workflow の `uses:` にはタグ（`actions/checkout@v6.0.3`）を書きます。実際に動くのは、ロックファイルに記録したコミットです。
 ロックファイルは `gh actions-lock`（GitHub 公式の `gh` の拡張）が作ります。手では編集しません。
 
-`uses:` を足したり変えたりしたときは、`gh actions-lock` を動かして、ロックファイルも一緒にコミットします。
+`uses:` を足したり変えたりしたときは、`just lock-actions` を動かして、ロックファイルも一緒にコミットします。
 ロックファイルと食い違う `uses:` を書いた workflow は、起動しません。検査の結果が付かないので、その PR はマージできません（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89)、[実行 43686598573](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/43686598573)。「This run likely failed because of a workflow file issue.」）。
 Dependabot が action を上げる PR では、ロックファイルの書き換えも Dependabot が行います。人の手作業は要りません（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。
 
@@ -409,14 +413,15 @@ PR が出ると、版を正本に写すコミットが機械で足され、検�
 
 確かめたのは、mise が `.tool-versions` と `.python-version` から版を読むところ（`mise ls --current`）までです。それぞれの道具で実際に入れるところは、試していません。
 
+作業の入口は、直下の `justfile` です。`just --list` で、レシピの一覧と説明が出ます。
+
 ```sh
-uv sync --locked --all-packages && uv run ruff check && uv run pytest   # workspace
-(cd api && uv sync --locked && uv run pytest)                           # API
-(cd web && npm ci && npm run typecheck && npm test)                     # web
-(cd infra && terraform init -backend=false && terraform test)           # Terraform
-python3 -m unittest discover -s automation                              # 振り分けと版の同期
-scripts/build-api.sh -t api                                             # 本番のイメージ
+just test          # 手元の検査を全部（本番のイメージの組み立ては除く）
+just workspace     # 検査を 1 つずつ。ほかに api、web、infra、automation
+just image -t api  # 本番のイメージ
 ```
+
+just は、PyPI の `rust-just` として、直下の `pyproject.toml` の開発用の依存に書いてあります。`uv sync` のあとは、`uv run just <レシピ>` で動きます。自分で入れた just を使っても構いません。
 
 ### 人が版を変えるとき
 
@@ -424,13 +429,14 @@ scripts/build-api.sh -t api                                             # 本番
 minor や major を上げるなど、人が意図して版を変えるときは、次の 2 つを行います。
 
 1. 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
-2. `python3 automation/versions.py align` を動かす。見張り役が正本に揃う
+2. `just align` を動かす。見張り役の `versions/Dockerfile` が、正本に揃う
 
-片方だけを直した PR は、検査（`automation/versions.py check`）が落とします。
+`just align` を動かし忘れた PR は、検査の `automation` が落とします。
+ライブラリの範囲や、workflow の action を変えるときのレシピは、[手引き](docs/manual.md)の「版を変える手順」にあります。
 
 ## 設定の反映
 
-`settings/apply.sh <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。
+`just apply-settings <owner>/<repo>` が、リポジトリの設定、environment、ruleset を反映します。中身は `settings/apply.sh` です。
 ruleset は 4 つです。
 
 - `main`: main の保護（`settings/ruleset.json`）。PR、承認 1 件、必須の検査、マージキュー
