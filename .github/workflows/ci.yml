@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - name: 版を正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
@@ -42,7 +42,7 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - name: 版を正本から読む
         id: versions
         working-directory: .
@@ -63,7 +63,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .tool-versions
@@ -80,7 +80,7 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - name: Terraform の版を正本から読む
         id: versions
         working-directory: .
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - name: 振り分けと版の同期のテスト
         run: python3 -m unittest discover -s automation -v
       - name: 版の正本と見張り役が揃っていることを確かめる
@@ -110,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - uses: actions/cache@v6.0.0
         with:
           path: /tmp/buildcache
