@@ -1,6 +1,6 @@
 name: version-sync
 
-# Dependabot が Dependabot 用の Dockerfile（.github/dependabot/Dockerfile）のバージョンを上げた PR に、管理場所の変更を積む。
+# Dependabot が Dependabot 用の Dockerfile（dependabot/Dockerfile）のバージョンを上げた PR に、管理場所の変更を積む。
 # スクリプトは常に main のバージョンで動かす。
 on:
   workflow_run:

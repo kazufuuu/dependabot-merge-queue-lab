@@ -54,7 +54,7 @@ align:
     python3 .github/scripts/versions.py align
     python3 .github/scripts/versions.py check
 
-# Dependabot の PR で、バージョンの同期が失敗したときに動かす。.github/dependabot/Dockerfile のバージョンを、.python-version などへ写す
+# Dependabot の PR で、バージョンの同期が失敗したときに動かす。dependabot/Dockerfile のバージョンを、.python-version などへ写す
 sync:
     python3 .github/scripts/versions.py sync
 

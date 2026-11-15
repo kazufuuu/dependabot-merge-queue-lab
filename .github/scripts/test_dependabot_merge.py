@@ -225,7 +225,7 @@ def runtime_pr(**overrides) -> dict:
     base = {
         "commits": [first, second],
         "head_pushers": ["sync-app[bot]"],
-        "files": [".github/dependabot/Dockerfile", ".python-version"],
+        "files": ["dependabot/Dockerfile", ".python-version"],
     }
     return pr(**{**base, **overrides})
 
@@ -239,7 +239,7 @@ class RuntimeTest(unittest.TestCase):
     def test_patch_before_sync_is_human(self):
         target = runtime_pr()
         target["commits"] = target["commits"][:1]
-        target["files"] = [".github/dependabot/Dockerfile"]
+        target["files"] = ["dependabot/Dockerfile"]
         target["head_pushers"] = ["dependabot[bot]"]
         self.assertFalse(classify(target, POLICY).auto)
 

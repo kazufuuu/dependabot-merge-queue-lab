@@ -9,14 +9,14 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 
 ## ディレクトリの見取り図
 
-`.github` の下が仕組みで、ほかは見本のコードです。
+`.github` の下と `dependabot/` が仕組みで、ほかは見本のコードです。
 
 | 場所 | 中身 | ほかのリポジトリへ持っていくか |
 |---|---|---|
 | `.github/workflows/`、`.github/dependabot.yml`、`.github/CODEOWNERS` | 仕組みの設定と workflow | 持っていく |
 | `.github/scripts/` | 仕組みを動かすスクリプトと、そのテスト。uv のプロジェクトではない。python3 だけで動く | 持っていく |
 | `.github/settings/` | リポジトリの設定、ruleset、GitHub App を用意するスクリプト | 持っていく |
-| `.github/dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない | 持っていく |
+| `dependabot/Dockerfile` | Dependabot 用の Dockerfile。バージョンを管理する場所ではない。`.github` の下には置けない（Dependabot が、`.github` の下の Dockerfile を変える PR を作れなかった） | 持っていく |
 | `justfile`、`docs/` | 作業の入口と文書 | 持っていく |
 | `.python-version`、`.node-version`、`pyproject.toml`、`uv.lock` | バージョンと依存。開発者が見るファイル | 持っていかない。持っていく先のものを使う |
 | `packages/`、`api/`、`web/`、`infra/`、`tests/` | 更新される側の、見本のコード | 持っていかない |
@@ -37,7 +37,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | Terraform のプロバイダ | `infra/versions.tf` の `required_providers` → `infra/.terraform.lock.hcl` |
 | GitHub Actions | `.github/workflows/*.yml` の `uses:` → `.github/workflows/actions.lock` |
 
-`.github/dependabot/Dockerfile` は、バージョンを管理する場所ではありません。Dependabot に新しいバージョンを見つけさせるためのファイルで、中身は機械が上のファイルに揃えます（「バージョンの更新の流れ」）。
+`dependabot/Dockerfile` は、バージョンを管理する場所ではありません。Dependabot に新しいバージョンを見つけさせるためのファイルで、中身は機械が上のファイルに揃えます（「バージョンの更新の流れ」）。
 
 ## 運用の決まり
 
@@ -46,8 +46,8 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の patch | ロックファイルだけ | CI が通れば自動で承認し、マージキューに入れる |
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
-| Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）と、Dependabot 用の `.github/dependabot/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
-| Python と Node の、セキュリティアップデート | 管理場所と、Dependabot 用の `.github/dependabot/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
+| Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）と、Dependabot 用の `dependabot/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
+| Python と Node の、セキュリティアップデート | 管理場所と、Dependabot 用の `dependabot/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定したバージョン（Actions の `uses:`、`==` で書いた依存） | バージョンを書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティアップデート | 更新による | cooldown なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、CI が通れば自動でマージする |
 | CI が落ちた patch | ロックファイルだけ | 承認せず、人に依頼する。所有者の承認が要る |
@@ -288,9 +288,9 @@ Python のバージョンの照合は、テストに持たせています。Depe
 ### バージョンの更新の流れ
 
 Python、Node、Terraform の管理場所は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
-そこで、`.github/dependabot/Dockerfile` を Dependabot 用の Dockerfile として置いています。ビルドしないファイルで、`FROM` にバージョンを並べただけのものです。
+そこで、`dependabot/Dockerfile` を Dependabot 用の Dockerfile として置いています。ビルドしないファイルで、`FROM` にバージョンを並べただけのものです。
 
-1. Dependabot が、`.github/dependabot/Dockerfile` のバージョンを上げる PR を出す。新しいバージョンを見つけること、cooldown、PR の作成は Dependabot の仕事
+1. Dependabot が、`dependabot/Dockerfile` のバージョンを上げる PR を出す。新しいバージョンを見つけること、cooldown、PR の作成は Dependabot の仕事
 2. `version-sync` の workflow が、Dependabot 用の Dockerfile のバージョンを `.python-version` などへ写し、その PR にコミットを積む
 3. CI が動く。PR は人のレビューに回る。コミットが 2 つになるので、自動マージの対象にはならない
 
@@ -310,7 +310,7 @@ Dependabot 用の Dockerfile の `FROM` の間には、行を挟んでいます�
 
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、バージョンを写します
 - push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、管理場所の 3 つ（`.python-version`、`.node-version`、`infra/versions.tf`）に限っています
-- 対象は、Dependabot が push した、`.github/dependabot/Dockerfile` だけを変える PR です
+- 対象は、Dependabot が push した、`dependabot/Dockerfile` だけを変える PR です
 - バージョンの記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の CI も、Dependabot 用の Dockerfile と管理場所の食い違いで落ちたままになります
 
 Renovate は、`.python-version` や `.node-version` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、Dependabot 用の Dockerfile と同期の仕掛けで補っています。
@@ -452,7 +452,7 @@ just は、ruff や pytest と同じ開発用の依存です（PyPI の `rust-ju
 minor や major を上げるなど、人が意図してバージョンを変えるときは、次の 2 つを行います。
 
 1. 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）を書き換える
-2. `uv run just align` を動かす。Dependabot 用の `.github/dependabot/Dockerfile` が、管理場所に揃う
+2. `uv run just align` を動かす。Dependabot 用の `dependabot/Dockerfile` が、管理場所に揃う
 
 `uv run just align` を動かし忘れた PR は、CI の `automation` が落とします。
 ライブラリの範囲や、workflow の action を変えるときのレシピは、[マニュアル](docs/manual.md)の「バージョンを変える手順」にあります。

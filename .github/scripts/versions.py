@@ -16,7 +16,7 @@ just（タスクランナー）も同じ。PyPI の rust-just を開発用の依
 - [tool.uv] required-version（uv.toml でも同じ）: Dependabot は自分の uv で uv lock を動かす
 
 どの管理場所も、Dependabot は書き換えられない。書き換えられるのは Dockerfile の
-FROM なので、.github/dependabot/Dockerfile を Dependabot 用の Dockerfile として置き、Dependabot にはそこを上げさせる。
+FROM なので、dependabot/Dockerfile を Dependabot 用の Dockerfile として置き、Dependabot にはそこを上げさせる。
 このスクリプトの sync は、Dependabot 用の Dockerfile のバージョンを .python-version などへ写すだけを行う。新しいバージョンは探さない。
 
 使い方:
@@ -33,7 +33,7 @@ import re
 import sys
 from pathlib import Path
 
-SENTINEL = ".github/dependabot/Dockerfile"
+SENTINEL = "dependabot/Dockerfile"
 PYTHON_VERSION_FILE = ".python-version"
 NODE_VERSION_FILE = ".node-version"
 TERRAFORM_FILE = "infra/versions.tf"
