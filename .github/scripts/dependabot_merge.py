@@ -222,7 +222,6 @@ def plan_for(pr: dict, policy: Policy) -> Plan:
     number = pr["number"]
     labels = set(pr["labels"])
     decision = classify(pr, policy)
-    approved_head = pr["head"] in pr["approved_commits"]
     waiting = pr["in_merge_queue"] or pr["auto_merge_enabled"]
 
     def to_human(reasons: tuple[str, ...]) -> Plan:
@@ -248,10 +247,9 @@ def plan_for(pr: dict, policy: Policy) -> Plan:
         return Plan(number, "自動マージの候補。CI の結果を待っています")
     if waiting:
         return Plan(number, "自動マージの候補。マージの順番を待っています")
-    if approved_head:
-        # 一度キューに入れたのに、マージされずに外れている。
-        return to_human(("マージキューの CI で外されました",))
-
+    # 承認が付いていて、キューにも auto-merge にも入っていない。前回のキューへの投入が
+    # 失敗したか、キューから外れたとき。どちらも、もう一度キューへの投入をやり直す。
+    # 本当に CI で外れたなら、head の CI が success でなくなり、上の分岐で人に回る。
     plan = Plan(number, "自動マージ: 承認してマージキューに入れます", approve=True, enqueue=True)
     if LABEL_AUTO not in labels:
         plan.add_labels.append(LABEL_AUTO)
@@ -412,17 +410,16 @@ def apply_merge(plan: Plan, pr: dict, repo: str, token: str) -> None:
     GITHUB_TOKEN でキューに入れると、merge_group の CI が起動せず、キューが止まる。
     """
     number = str(plan.number)
-    # ラベル、auto-merge、承認の順に行う。承認を最後にするのは、途中で失敗しても、
-    # 承認だけが残って「キューから外れた」と誤判定される状態を作らないため。auto-merge は
-    # 承認が付くまでマージしないので、承認の前に有効にしても、未承認のまま入ることはない。
-    gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)
-    gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"], token=token)
+    # 承認、ラベル、auto-merge の順。この順で実物のマージの実績がある（#70、#79 など）。
+    # App の承認が先に付くので、gh pr merge --auto を呼ぶ時点で条件がそろい、その場でキューに入る。
     gh(
         "api", "-X", "POST", f"repos/{repo}/pulls/{number}/reviews",
         "-f", "event=APPROVE", "-f", f"commit_id={pr['head']}",
         "-f", "body=patch の更新で、CI が通っています。自動で承認します。",
         token=token,
     )  # fmt: skip
+    gh("pr", "edit", number, "--repo", repo, "--add-label", LABEL_AUTO, token=token)
+    gh("pr", "merge", number, "--repo", repo, "--auto", "--match-head-commit", pr["head"], token=token)
 
 
 def b64url(data: bytes) -> str:

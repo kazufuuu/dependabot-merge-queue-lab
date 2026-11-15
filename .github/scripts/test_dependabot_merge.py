@@ -341,15 +341,25 @@ class PlanTest(unittest.TestCase):
         target = pr(labels=[LABEL_AUTO], approved_commits=["aaa"], in_merge_queue=True)
         self.assertTrue(plan_for(target, POLICY).is_noop())
 
-    def test_pr_removed_from_queue_goes_to_human(self):
+    def test_approved_but_unqueued_pr_is_requeued(self):
+        # 承認済みで、キューにも auto-merge にも入っていない（投入が失敗した／外れた）。
+        # CI は success なので、人に回さず、もう一度キューへの投入をやり直す。
         plan = plan_for(pr(labels=[LABEL_AUTO], approved_commits=["aaa"]), POLICY)
-        self.assertFalse(plan.approve or plan.enqueue)
-        self.assertEqual(plan.remove_labels, [LABEL_AUTO])
-        self.assertEqual(plan.add_labels, [LABEL_HUMAN])
+        self.assertTrue(plan.approve and plan.enqueue)
 
-    def test_removed_pr_is_not_requeued_on_later_runs(self):
+    def test_requeue_happens_even_after_a_human_label(self):
+        # 一度 human のラベルが付いても、App の承認があり head が同じなら、やり直す。
         target = pr(labels=[LABEL_HUMAN], approved_commits=["aaa"])
-        self.assertTrue(plan_for(target, POLICY).is_noop())
+        plan = plan_for(target, POLICY)
+        self.assertTrue(plan.approve and plan.enqueue)
+        self.assertEqual(plan.remove_labels, [LABEL_HUMAN])
+
+    def test_failed_check_after_eject_goes_to_human(self):
+        # 本当にキューの CI で外れたときは、head の CI が success でなくなるので、人に回る。
+        target = pr(labels=[LABEL_AUTO], approved_commits=["aaa"], check="failure")
+        plan = plan_for(target, POLICY)
+        self.assertFalse(plan.approve or plan.enqueue)
+        self.assertEqual(plan.add_labels, [LABEL_HUMAN])
 
     def test_new_head_after_rebase_starts_over(self):
         target = pr(head="bbb", labels=[LABEL_HUMAN], approved_commits=["aaa"])
