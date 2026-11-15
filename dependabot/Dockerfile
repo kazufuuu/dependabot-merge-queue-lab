@@ -15,4 +15,4 @@ FROM python:3.13.16-slim AS python
 FROM node:24.20.0-slim AS node
 
 # Terraform（管理場所は infra/versions.tf）
-FROM hashicorp/terraform:1.16.5 AS terraform
+FROM hashicorp/terraform:1.17.1 AS terraform
