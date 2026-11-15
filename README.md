@@ -13,7 +13,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の patch | ロックファイルだけ | 検査が通れば自動で承認し、マージキューに入れる |
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
-| ランタイムと道具の版（Python、Node、Terraform） | 見張り役の Dockerfile。workflow が正本の変更を積む | 人に依頼する。所有者の承認が要る |
+| ランタイムと道具の版（Python、Node、uv、Terraform） | 見張り役の Dockerfile。workflow が正本の変更を積む | 人に依頼する。所有者の承認が要る |
 | Python と Node の、セキュリティの修正を含む版 | 見張り役の Dockerfile と正本 | 待つ期間なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定した版（Actions、uv や ruff などの `==`） | 版を書いたファイル | 人に依頼する。所有者の承認が要る |
 | セキュリティ更新 | 更新による | 待つ期間なしで、依存ごとに出る。振り分けは上の行と同じ。patch でロックファイルだけなら、検査が通れば自動でマージする |
@@ -152,9 +152,9 @@ GitHub の受信箱は、題名やラベルで絞り込めず、除外の条件�
 
 | job | 内容 | 版の読み方 |
 |---|---|---|
-| `workspace` | workspace の lint とテスト | setup-uv が `uv.lock` から uv の版を読む。Python は uv が `.python-version` から選ぶ |
+| `workspace` | workspace の lint とテスト | `automation/versions.py show` が `.tool-versions` から uv の版を読み、setup-uv に渡す。Python は uv が `.python-version` から選ぶ |
 | `api` | API のテスト | 同上 |
-| `web` | 型検査とテスト | setup-node が `web/.node-version` を読む |
+| `web` | 型検査とテスト | setup-node が `.tool-versions` を読む |
 | `infra` | Terraform の書式、検証、テスト | `automation/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
 | `automation` | 振り分けと版の同期のテスト、版が揃っていることの確認 | runner の Python |
 | `image` | API のイメージの組み立て | `scripts/build-api.sh` が正本から読み、ビルドの引数で渡す |
@@ -171,13 +171,14 @@ runner にはコンパイラが入っていますが、slim のイメージに�
 | 版 | 正本 | 読む道具 |
 |---|---|---|
 | Python | `.python-version` | uv（`api/` でも、親のディレクトリのこのファイルを読む） |
-| uv | `pyproject.toml` の開発用の依存 `uv==0.13.x`（`uv.lock` に入る） | setup-uv、`uv sync` |
-| Node | `web/.node-version` | setup-node、手元の版管理の道具 |
+| uv | `.tool-versions` の `uv` の行 | 手元の mise や asdf。CI では `automation/versions.py` |
+| Node | `.tool-versions` の `nodejs` の行 | 手元の mise や asdf。CI では setup-node |
 | Terraform | `infra/versions.tf` の `required_version = "= 1.16.x"` | terraform |
 
 手元、CI、本番のイメージは、どれもこの正本を読みます。
 
-- 手元: Python は、uv が `.python-version` の版を取得して使います。uv は、`uv sync` が正本の版を `.venv/bin/uv` に入れます
+- 手元: uv と Node は、mise や asdf が `.tool-versions` の版を入れます。Python は、uv が `.python-version` の版を取得して使います
+- 手元の版がずれていると、テストが落ちます。`tests/test_toolchain.py` が Python と uv を、`web/src/toolchain.test.js` が Node を、正本と比べます
 - CI: 「検査」の表のとおりです
 - 本番のイメージ: `api/Dockerfile` は、版をビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`scripts/build-api.sh` が正本から渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
 
@@ -190,12 +191,11 @@ runner にはコンパイラが入っていますが、slim のイメージに�
 
 そのため、`requires-python` は範囲（`>=3.13,<3.14`）で書き、`required-version` は下限（`>=0.13`）だけを書いています。
 手元に入れた uv の版は、uv 自身には照合させられません。古すぎる uv だけが、下限で止まります。
+そこで、照合はテストに持たせています。Dependabot はテストを動かさないので、更新は失敗しません。
 
 ### 版の更新の流れ
 
-uv は PyPI のパッケージなので、Dependabot が `pyproject.toml` と `uv.lock` を直接上げます。仕掛けは要りません。
-
-Python、Node、Terraform の正本は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
+Python、Node、uv、Terraform の正本は、Dependabot が書き換えられません。書き換えられるのは Dockerfile の `FROM` です。
 そこで、`versions/Dockerfile` を見張り役として置いています。組み立てないファイルで、`FROM` に版を並べただけのものです。
 
 1. Dependabot が、`versions/Dockerfile` の版を上げる PR を出す。新しい版を見つけること、待機、PR の作成は Dependabot の仕事
@@ -205,11 +205,11 @@ Python、Node、Terraform の正本は、Dependabot が書き換えられませ�
 `version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。
 
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、版を写します
-- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、正本の 3 つ（`.python-version`、`web/.node-version`、`infra/versions.tf`）に限っています
+- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、正本の 3 つ（`.python-version`、`.tool-versions`、`infra/versions.tf`）に限っています
 - 対象は、Dependabot が push した、`versions/Dockerfile` だけを変える PR です
 - 版の記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の検査も、見張り役と正本の食い違いで落ちたままになります
 
-Renovate は、`.python-version` や `.node-version` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、見張り役と同期の仕掛けで補っています。
+Renovate は、`.python-version` や `.tool-versions` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、見張り役と同期の仕掛けで補っています。
 
 見張り役のイメージは Docker Hub のものに限ります。待機が Docker Hub のイメージにしか効かないためです。ほかのレジストリのイメージを書くと、検査が落ちます。
 
@@ -269,15 +269,16 @@ Dependabot は、7 日たつと同じ版を通常の更新として出します�
 
 Docker Hub の公式イメージは、同じタグのまま作り直されます。Dependabot は最後に push された日で待つ期間を数えるので、通常の更新は、作り直しのたびに遅れます。
 
-公式イメージの patch を、人を待たずにマージする切り替え（`AUTOMERGE_RUNTIME_PATCH`）も実装しています。ただし、今の構成では働きません。
-試したところ、App が承認しても「レビューが必要」のままでした。写しのコミットを push したのが App 自身で、ruleset が「最後に push した本人以外の承認」を求めるためです。
-働かせるには、写す App と承認する App を分けます。そのうえで、`owners-lockfiles` の対象に、見張り役と正本のファイルを足します。既定は無効です。
+Python と Node の本体の更新は、patch も含めて、すべて人が判断します。更新が少ないためです。
+PR が出ると、版を正本に写すコミットが機械で足され、検査が動き、レビュワーに依頼が付きます。人が行うのは承認だけです。
 
 ## 手元の始め方
 
-1. uv を入れる。版は `pyproject.toml` の `uv==` に合わせる。`uv sync` のあとは、同じ版が `.venv/bin/uv` に入る。Python は uv が `.python-version` の版を取得するので、入れなくてよい
-2. Node を入れる。版は `web/.node-version` に合わせる。mise、fnm、nvm などは、このファイルを読む
-3. Terraform を入れる。版は `infra/versions.tf` の `required_version` に合わせる
+1. mise か asdf を入れ、リポジトリの直下で `mise install` を動かす。`.tool-versions` に書いた版の uv と Node が入る
+2. Python は入れなくてよい。uv が `.python-version` の版を取得する
+3. Terraform を入れる。版は `infra/versions.tf` の `required_version` に合わせる。版が違うと、terraform 自身が止まる
+
+mise が `.tool-versions` と `.python-version` からこの版を読むことは、`mise ls --current` で確かめました。`mise install` で入れるところは試していません。
 
 ```sh
 uv sync --locked --all-packages && uv run ruff check && uv run pytest   # workspace
@@ -293,11 +294,10 @@ scripts/build-api.sh -t api                                             # 本番
 ふだんの更新では、人はファイルを編集しません。レビューと承認だけを行います。
 minor や major を上げるなど、人が意図して版を変えるときは、次の 2 つを行います。
 
-1. 正本（`.python-version`、`web/.node-version`、`infra/versions.tf`）を書き換える
+1. 正本（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
 2. `python3 automation/versions.py align` を動かす。見張り役が正本に揃う
 
 片方だけを直した PR は、検査（`automation/versions.py check`）が落とします。
-uv は、`pyproject.toml` の `uv==` を書き換えて `uv lock` を動かします。
 
 ## 設定の反映
 
@@ -320,6 +320,8 @@ App の作成をほかの部門に頼むときの依頼書は [docs/app-request.
 ## 残る制約
 
 - ランタイムと道具の版、Actions の `uses:`、`==` で固定した依存は、patch の更新でも版を書いたファイルが変わるので、人の承認が要ります
+- uv の本体は、Docker Hub のイメージ（`astral/uv`）の版として追います。通常の更新として 7 日待って出ます。uv のセキュリティの修正を待たずに出す仕掛けは、ありません
+- 手元の版の照合は、テストを動かしたときに働きます。mise や asdf を使わずに別の版を入れた人は、テストが落ちて気づきます
 - Dependabot は、依存ごとに最新の版だけを提案します。範囲を超える版が出ている依存では、範囲の中の patch は提案されません
 - uv の方針は、Dependabot のライブラリ判定に頼っています。同じ名前のパッケージが PyPI に登録されると、判定が変わることがあります
 - 人が 1 人だけの組織では、ruleset を入れたあとに main を変える手段がありません。自分の PR を自分で承認できないためです。この検証では、main の変更のたびに ruleset を一時的に無効にしました
