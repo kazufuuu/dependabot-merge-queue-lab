@@ -79,11 +79,11 @@ updates:
 
   # Python と Node のランタイム、Terraform 本体のバージョンの管理場所は、.python-version、.node-version、infra/versions.tf にある。
   # Dependabot はそこを書き換えられない。
-  # Dependabot 用の versions/Dockerfile を上げさせ、version-sync の workflow が .python-version などへ写す。
+  # Dependabot 用の .github/dependabot/Dockerfile を上げさせ、version-sync の workflow が .python-version などへ写す。
   # cooldown は Docker Hub のイメージにしか効かないので、Dependabot 用の Dockerfile には Docker Hub のイメージを書く。
   # uv は、ここには置かない。直下の uv の設定が、ライブラリと同じく、pyproject.toml の開発用の依存として上げる。
   - package-ecosystem: docker
-    directory: /versions
+    directory: /.github/dependabot
     # コンテナイメージには、Dependabot のセキュリティアップデートが無い。ここでは通常の更新だけを、cooldown のあとに出す。
     # Python と Node のセキュリティアップデートは、security-release の workflow が待たずに出す。
     schedule:

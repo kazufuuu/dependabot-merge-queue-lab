@@ -30,7 +30,7 @@ WORKTREE = Path("pr")
 # 積んでよいファイル。これ以外が変わっていたら、何もせずに失敗させる。
 ALLOWED = frozenset(versions.SOURCES[name] for name in versions.IMAGES)
 COMMIT_MESSAGE = (
-    "バージョンの管理場所を versions/Dockerfile に合わせる\n\n"
+    "バージョンの管理場所を .github/dependabot/Dockerfile に合わせる\n\n"
     "Dependabot が上げた Dependabot 用の Dockerfile のバージョンを、.python-version などへ写した。"
 )
 
@@ -158,7 +158,7 @@ def create_commit(repo: str, token: str, parent: str, files: dict[str, str], mes
 def report_failure(repo: str, number: str, error: Exception) -> None:
     """失敗を PR に残す。人が何を直せばよいかを書く。"""
     body = (
-        "バージョンの同期に失敗しました。この PR は、Dependabot 用の Dockerfile（`versions/Dockerfile`）と管理場所が食い違ったままです。\n\n"
+        "バージョンの同期に失敗しました。この PR は、Dependabot 用の Dockerfile（`.github/dependabot/Dockerfile`）と管理場所が食い違ったままです。\n\n"
         f"- 理由: {error}\n"
         "- 直し方: この PR のブランチで `uv run just sync` を動かし、結果をコミットしてください。"
         "スクリプトがバージョンの記述を見つけられない場合は、理由に出ているファイルを確かめてください"
