@@ -12,7 +12,7 @@
 FROM python:3.13.16-slim AS python
 
 # Node（管理場所は .node-version）
-FROM node:24.20.0-slim AS node
+FROM node:24.22.2-slim AS node
 
 # Terraform（管理場所は infra/versions.tf）
 FROM hashicorp/terraform:1.16.5 AS terraform
