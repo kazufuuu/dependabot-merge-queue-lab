@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """自動マージ用の GitHub App を作り、鍵を environment に登録する。
 
-使い方: settings/create-app.py <owner>/<repo> [--name <App の名前>] [--port <番号>]
+使い方: settings/create-app.py <owner>/<repo> [--role approver|writer] [--name <App の名前>] [--port <番号>]
+
+役割（--role）は 2 つある。既定は approver。
+- approver: 条件を満たした PR を承認し、マージキューに入れる App
+- writer: PR のブランチにコミットを積み、PR を出す App。承認する App と分けるときに作る
 
 画面での操作は、ボタンを 2 回押すことと、install 先を選ぶことだけになる。
 1. 表示された URL を開き、ボタンを押す。GitHub の画面で App の作成を確かめる
@@ -28,8 +32,21 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 ENVIRONMENT = "automerge"
-VARIABLE = "AUTOMERGE_APP_ID"
-SECRET = "AUTOMERGE_APP_PRIVATE_KEY"
+# 役割ごとの、App の名前の末尾、変数の名前、secret の名前、説明。
+ROLES = {
+    "approver": (
+        "dependabot-automerge",
+        "AUTOMERGE_APP_ID",
+        "AUTOMERGE_APP_PRIVATE_KEY",
+        "検査の通った patch の更新を承認し、マージキューに入れる",
+    ),
+    "writer": (
+        "dependabot-writer",
+        "WRITER_APP_ID",
+        "WRITER_APP_PRIVATE_KEY",
+        "依存の更新の PR に、版を写すコミットを積む。セキュリティの修正の PR を出す",
+    ),
+}
 PERMISSIONS = {"contents": "write", "pull_requests": "write"}
 
 
@@ -129,22 +146,24 @@ def wait_for_code(port: int, post_url: str, manifest: dict, state: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("repo", help="<owner>/<repo>")
+    parser.add_argument("--role", choices=tuple(ROLES), default="approver")
     parser.add_argument("--name", help="App の名前。GitHub 全体で重ならないこと")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     owner = args.repo.split("/")[0]
+    suffix, variable, secret, description = ROLES[args.role]
 
     existing = gh("api", f"repos/{args.repo}/environments/{ENVIRONMENT}/secrets", "--jq", ".secrets[].name")
-    if SECRET in existing.split():
-        raise SystemExit(f"{SECRET} はすでに登録されています。作り直すときは、先に secret を消してください。")
+    if secret in existing.split():
+        raise SystemExit(f"{secret} はすでに登録されています。作り直すときは、先に secret を消してください。")
 
     is_org = gh("api", f"users/{owner}", "--jq", ".type") == "Organization"
     state = secrets.token_urlsafe(16)
     base = f"https://github.com/organizations/{owner}/settings/apps/new" if is_org else "https://github.com/settings/apps/new"
     manifest = {
-        "name": args.name or f"{owner}-dependabot-automerge",
+        "name": args.name or f"{owner}-{suffix}",
         "url": f"https://github.com/{args.repo}",
-        "description": "検査の通った patch の更新を承認し、マージキューに入れる",
+        "description": description,
         "public": False,
         "hook_attributes": {"url": f"https://github.com/{args.repo}", "active": False},
         "redirect_url": f"http://localhost:{args.port}/callback",
@@ -155,9 +174,9 @@ def main() -> int:
 
     # code は 1 時間で切れるので、すぐに App の情報と鍵に換える。
     app = api("POST", f"/app-manifests/{code}/conversions")
-    gh("variable", "set", VARIABLE, "--env", ENVIRONMENT, "--repo", args.repo, "--body", str(app["id"]))
-    gh("secret", "set", SECRET, "--env", ENVIRONMENT, "--repo", args.repo, input_text=app["pem"])
-    print(f"App「{app['slug']}」を作り、{VARIABLE} と {SECRET} を environment {ENVIRONMENT} に登録しました。")
+    gh("variable", "set", variable, "--env", ENVIRONMENT, "--repo", args.repo, "--body", str(app["id"]))
+    gh("secret", "set", secret, "--env", ENVIRONMENT, "--repo", args.repo, input_text=app["pem"])
+    print(f"App「{app['slug']}」を作り、{variable} と {secret} を environment {ENVIRONMENT} に登録しました。")
 
     print("次の URL を開き、Only select repositories で対象のリポジトリだけを選んで install してください:")
     print(f"  https://github.com/apps/{app['slug']}/installations/new", flush=True)
