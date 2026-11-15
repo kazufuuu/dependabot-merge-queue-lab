@@ -10,7 +10,7 @@
 | 3 | 満たす | テストが落ちた patch の PR は、自動でマージされず、`needs-review` が付いた（[PR #81](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/81)）。本番のイメージのビルドだけが落ちた PR も、`all-green` が落ちた（[PR #47](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/47)） |
 | 4 | 満たす | ruleset は、ブランチが最新であることを求めない（`strict_required_status_checks_policy` が false）。マージキューが、最新の main と合わせて CI を動かし直す（[PR #79](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/79)） |
 | 5 | 満たす | なし |
-| 6 | 満たす | 所有者の作り直しのあとも、App はロックファイルだけの PR を、所有者のレビューの免除でマージキューに入れた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70) は 06:01:39 に投入、06:02:31 にマージ。承認は App の 1 件だけ）。人が自分の鍵で署名して Dependabot を名乗るコミットは、実物では試していない |
+| 6 | 満たす | 所有者の作り直しのあとも、App はロックファイルだけの PR を、所有者のレビューの免除でマージキューに入れた（[PR #70](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/70) は 06:01:39 に投入、06:02:31 にマージ。承認は App の 1 件だけ）。人が自分の鍵で署名して Dependabot を名乗るコミットは、実物では試していない。置き方を `.github` の下へ移し、振り分けの直しを入れたあとも、自動マージが実物で通った（[PR #108](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/108)。ruff のロックを下げて Dependabot に patch の PR を出させ、App が 15:41:42 に承認、merge_group の CI が通り、15:42:55 にマージ。PR から約 3 分。このとき、必須のチェックの発行元の固定（integration_id）も入っていた） |
 | 7 | 一部 | 割り振りの設定は入れた。組織のメンバーが 1 人なので、偏らないことと、人数を変えたときの動きは、実物で確かめていない |
 | 8 | 満たす | 開発用の依存（pytest、ruff、just など）は、直下の `pyproject.toml` に範囲で書いてあり、ライブラリと同じ設定が追う |
 | 9 | 一部 | 判定と、Python と Node の見分けは入れた。uv は PyPI のパッケージなので、Dependabot のセキュリティアップデートに任せる。ライブラリのセキュリティアップデートが自動でマージされるところは、実物でまだ確かめていない |
