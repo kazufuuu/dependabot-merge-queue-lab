@@ -37,7 +37,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | 対象 | バージョンを書くファイル | 実際のバージョンが決まるファイル |
 |---|---|---|
 | Python のランタイム | `.python-version`（例: `3.13.16`） | `.python-version`。patch まで書く |
-| Node のランタイム | `.tool-versions` の `nodejs` の行（例: `nodejs 24.20.0`） | `.tool-versions`。patch まで書く |
+| Node のランタイム | `.node-version`（例: `24.20.0`） | `.node-version`。patch まで書く |
 | Terraform 本体 | `infra/versions.tf` の `required_version`（例: `= 1.16.5`） | `infra/versions.tf`。patch まで書く |
 | uv | 直下の `pyproject.toml` の開発用の依存（範囲。例: `uv>=0.13,<0.14`） | `uv.lock` |
 | Python のライブラリ | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` の依存（範囲） | `uv.lock`、`api/uv.lock` |
@@ -47,8 +47,8 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 
 手元、CI、本番のイメージは、どれもこの表のファイルからバージョンを読みます。
 
-`versions/Dockerfile` にも Python、Node、Terraform のバージョンが並んでいますが、バージョンを管理する場所ではありません。Dependabot に新しいバージョンを見つけさせるためのファイルで、中身は、機械が `.python-version`、`.tool-versions`、`infra/versions.tf` に揃えます。
-バージョンを確かめるときも、書き換えるときも、`versions/Dockerfile` ではなく、`.python-version`、`.tool-versions`、`infra/versions.tf` を見てください。
+`versions/Dockerfile` にも Python、Node、Terraform のバージョンが並んでいますが、バージョンを管理する場所ではありません。Dependabot に新しいバージョンを見つけさせるためのファイルで、中身は、機械が `.python-version`、`.node-version`、`infra/versions.tf` に揃えます。
+バージョンを確かめるときも、書き換えるときも、`versions/Dockerfile` ではなく、`.python-version`、`.node-version`、`infra/versions.tf` を見てください。
 
 ### 自動で起きること
 
@@ -57,7 +57,7 @@ Dependabot（GitHub の機能）が、使っているライブラリや道具の
 | ライブラリの patch で、ロックファイルだけが変わる | ロックファイル（`uv.lock`、`api/uv.lock`、`web/package-lock.json`、`infra/.terraform.lock.hcl`） | テストが通ると、`automerge` ラベルが付き、2〜3 分で main に入る | 何もしない |
 | ライブラリの patch で、テストが落ちた | ロックファイル | `needs-review` ラベルと理由のコメントが付く | レビューする |
 | ライブラリの minor、major | 範囲の中ならロックファイルだけ。範囲を超えると、`pyproject.toml`、`package.json`、`infra/versions.tf` も変わる | `needs-review` ラベルが付く | レビューする |
-| Python と Node のランタイム、Terraform 本体 | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
+| Python と Node のランタイム、Terraform 本体 | `.python-version`、`.node-version`、`infra/versions.tf` のどれか 1 つ。`versions/Dockerfile` も一緒に変わる | `needs-review` ラベルが付く。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る | レビューする |
 | uv、just | `uv.lock`。範囲を超えると、直下の `pyproject.toml` も変わる | patch は、テストが通ると自動で入る。minor と major は、`needs-review` ラベルが付く | patch は何もしない。minor と major はレビューする |
 | GitHub Actions | `.github/workflows/*.yml` と `.github/workflows/actions.lock` | 週に 1 本にまとまって出る | レビューする |
 | セキュリティアップデート | 通常の更新と同じファイル | cooldown なしで出る。自動で入るか、人が判断するかの分け方は、通常の更新と同じ | ライブラリの patch でテストが通れば、何もしない。ほかはレビューする |
@@ -106,7 +106,7 @@ Python の patch の PR は、uv のバージョンに関係なく CI が動き�
 
 | 変えたいもの | 書き換えるファイル | そのあと動かすレシピ | コミットするファイル |
 |---|---|---|---|
-| Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.tool-versions`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`versions/Dockerfile` |
+| Python、Node、Terraform のバージョン（同じ系列の中） | `.python-version`、`.node-version`、`infra/versions.tf` のどれか | `uv run just align` | 書き換えたファイルと、`versions/Dockerfile` |
 | Python のライブラリ、uv、just のバージョンの範囲 | `pyproject.toml`、`api/pyproject.toml`、`packages/*/pyproject.toml` | `uv run just lock-python` | 書き換えたファイルと、`uv.lock`、`api/uv.lock` |
 | npm のライブラリのバージョンの範囲 | `web/package.json` | `uv run just lock-web` | `web/package.json` と `web/package-lock.json` |
 | workflow が使う action | `.github/workflows/*.yml` の `uses:`。完全なタグ（`actions/checkout@v6.0.3`）で書く | `uv run just lock-actions` | 書き換えた workflow と、`.github/workflows/actions.lock` |
@@ -117,7 +117,7 @@ Python の minor や major、Node の major を上げる手順は、「Python �
 
 | 忘れたこと | 起きること | 直し方 |
 |---|---|---|
-| `.python-version`、`.tool-versions`、`infra/versions.tf` を書き換えたあと、`uv run just align` を動かさなかった | CI の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `uv run just align` を動かし、`versions/Dockerfile` をコミットする |
+| `.python-version`、`.node-version`、`infra/versions.tf` を書き換えたあと、`uv run just align` を動かさなかった | CI の `automation` が落ちる。`versions/Dockerfile` のバージョンと食い違う、と出る | `uv run just align` を動かし、`versions/Dockerfile` をコミットする |
 | `pyproject.toml` の範囲を書き換えたあと、`uv run just lock-python` を動かさなかった | CI の `workspace` か `api` が落ちる。「The lockfile at `uv.lock` needs to be updated」と出る（手元で確かめた） | `uv run just lock-python` を動かし、`uv.lock` と `api/uv.lock` をコミットする |
 | `web/package.json` の範囲を書き換えたあと、`uv run just lock-web` を動かさなかった | CI の `web` が、`npm ci` で落ちる（npm の決まった動き。このリポジトリでは試していない） | `uv run just lock-web` を動かし、`web/package-lock.json` をコミットする |
 | workflow の `uses:` を書き換えたあと、`uv run just lock-actions` を動かさなかった | workflow が起動しない。CI の結果が付かないので、マージできない。Actions の画面に「This run likely failed because of a workflow file issue.」と出る（[PR #89](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/89) で確かめた） | `uv run just lock-actions` を動かし、`.github/workflows/actions.lock` をコミットする |
@@ -146,7 +146,7 @@ Node の major を上げるときに書き換える場所は、次のとおり�
 
 | 順 | 書き換える場所 | 内容 |
 |---|---|---|
-| 1 | `.tool-versions` の `nodejs` の行 | 新しいバージョン |
+| 1 | `.node-version` | 新しいバージョン |
 | 2 | `web/package.json` の `engines.node` | 新しい系列の範囲（例: `>=25 <26`）。`web/.npmrc` の `engine-strict` があるので、範囲が違うと `npm ci` が止まる |
 | 3 | `versions/Dockerfile` | 手では書き換えない。`uv run just align` を動かす |
 | 4 | `web/package-lock.json` | 手では書き換えない。`uv run just lock-web` を動かす |
@@ -172,14 +172,26 @@ CI が落ちたときは、落ちた job と同じ名前のレシピを手元で
 |---|---|---|
 | uv | 決まったバージョンは無い。0.13 以上 | 公式のインストーラ、Homebrew、mise |
 | Python | `.python-version` | 入れなくてよい。uv が取得する |
-| Node | `.tool-versions` | mise、asdf。nodejs.org から入れてもよい |
+| Node | `.node-version` | nodenv、fnm、mise、asdf。nodejs.org から入れてもよい |
 | Terraform | `infra/versions.tf` の `required_version` | mise、asdf、公式の配布物 |
 | Docker | 決まったバージョンは無い | `uv run just image` を動かすときだけ要る |
 | `gh` と、拡張の `gh actions-lock` | 拡張は v0.4.1 | `gh extension install github/gh-actions-lock --pin v0.4.1`。`uv run just lock-actions` を動かすときだけ要る |
 
 手元の uv が 0.13 より古いと、uv が止まって知らせます。
 新しい Python が入らないとき（「No interpreter found for Python ...」）は、`uv self update` で uv を更新します。古い uv は、新しい Python をまだ知らないためです。
-手元の Python と Node のバージョンが、`.python-version` や `.tool-versions` と違うと、テストが落ちて知らせます。uv のバージョンは照合しません。
+手元の Python と Node のバージョンが、`.python-version` や `.node-version` と違うと、テストが落ちて知らせます。uv のバージョンは照合しません。
+
+`.node-version` を読む道具は、次のとおりです。それぞれの道具の文書で確かめました。実際に入れるところは、試していません。
+
+| 道具 | `.node-version` の扱い |
+|---|---|
+| nodenv | そのまま読む |
+| fnm | 読む。ディレクトリに入ったときに切り替えるには、シェルの設定に `fnm env --use-on-cd` を使う |
+| mise | 設定が要る。`mise settings add idiomatic_version_file_enable_tools node` |
+| asdf | 設定が要る。`~/.asdfrc` に `legacy_version_file = yes` と書く |
+
+古い mise（2025.2.7）は、設定なしで `.node-version` と `.python-version` を読みました（`mise ls --current` で確かめました）。
+
 just は、ruff や pytest と同じ開発用の依存です。`uv run` で動かすと、`uv.lock` のバージョンになり、CI と揃います。自分で入れた just で `just <レシピ>` と打っても動きます。
 
 確かめたことと、確かめていないことは、次のとおりです。
@@ -187,7 +199,6 @@ just は、ruff や pytest と同じ開発用の依存です。`uv run` で動�
 - just を別に入れていない状態で、`uv sync` のあとに動かしたレシピは、`uv run just workspace`、`uv run just api`、`uv run just automation`、`uv run just versions`、`uv run just align`、`uv run just lock-python`、`uv run just lock-actions` です
 - `uv run just web`、`uv run just infra`、`uv run just image` は、CI で動くことを確かめました。手元では動かしていません
 - `uv run just lock-web`、`uv run just sync`、`uv run just apply-settings` は、動かしていません
-- mise が `.tool-versions` と `.python-version` からバージョンを読むところは確かめました。それぞれの道具で実際に入れるところは、試していません
 - Python のバージョンがずれたときにテストが落ちることは、確かめました。Node のバージョンがずれたときは、確かめていません
 
 ### 通知の減らし方

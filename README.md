@@ -14,7 +14,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 対象 | ファイル |
 |---|---|
 | Python のランタイム | `.python-version` |
-| Node のランタイム | `.tool-versions` |
+| Node のランタイム | `.node-version` |
 | Terraform 本体 | `infra/versions.tf` の `required_version` |
 | uv | 直下の `pyproject.toml` → `uv.lock` |
 | Python のライブラリ | 各 `pyproject.toml` → `uv.lock`、`api/uv.lock` |
@@ -31,7 +31,7 @@ patch の更新はテストが通れば自動でマージし、それ以外は�
 | 範囲の中の patch | ロックファイルだけ | CI が通れば自動で承認し、マージキューに入れる |
 | 範囲の中の minor | ロックファイルだけ | 人に依頼する。所有者の承認が要る |
 | 範囲を超える更新、major | manifest も変わる | 人に依頼する。所有者の承認が要る |
-| Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.tool-versions`、`infra/versions.tf`）と、Dependabot 用の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
+| Python と Node のランタイム、Terraform 本体のバージョン | 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）と、Dependabot 用の `versions/Dockerfile` | 人に依頼する。所有者の承認が要る。Python は patch だけ、Node は同じ major の中だけ、Terraform は全部の PR が出る |
 | uv、just | ライブラリと同じ。範囲の中ならロックファイルだけ | ライブラリと同じ。patch は自動、minor は人 |
 | Python と Node の、セキュリティアップデート | 管理場所と、Dependabot 用の `versions/Dockerfile` | cooldown なしで workflow が PR を出す。人に依頼する。所有者の承認が要る |
 | 固定したバージョン（Actions の `uses:`、`==` で書いた依存） | バージョンを書いたファイル | 人に依頼する。所有者の承認が要る |
@@ -226,7 +226,7 @@ CI が落ちた patch も、題名の形は自動でマージされる PR と同
 |---|---|---|
 | `workspace` | workspace の lint とテスト | setup-python が `.python-version` の Python を入れる。`automation/versions.py show` が `uv.lock` から uv のバージョンを読み、setup-uv に渡す |
 | `api` | API のテスト | 同上 |
-| `web` | 型チェックとテスト | setup-node が `.tool-versions` を読む |
+| `web` | 型チェックとテスト | setup-node が `.node-version` を読む |
 | `infra` | Terraform の書式、検証、テスト | `automation/versions.py show` が `infra/versions.tf` から読み、setup-terraform に渡す |
 | `automation` | 振り分けとバージョンの同期のテスト、バージョンが揃っていることの確認 | runner の Python |
 | `image` | API のイメージのビルド | `scripts/build-api.sh` が `.python-version` と `uv.lock` から読み、ビルドの引数で渡す |
@@ -245,12 +245,12 @@ Python と Node のランタイム、Terraform 本体のバージョンは、そ
 | バージョン | 管理場所 | 読む道具 |
 |---|---|---|
 | Python | `.python-version` | uv（`api/` でも、親のディレクトリのこのファイルを読む） |
-| Node | `.tool-versions` の `nodejs` の行 | 手元の mise や asdf。CI では setup-node |
+| Node | `.node-version` | 手元の nodenv や fnm など。CI では setup-node |
 | Terraform | `infra/versions.tf` の `required_version = "= 1.16.x"` | terraform |
 
 手元、CI、本番のイメージは、どれもこの管理場所を読みます。Python と Node は、patch まで揃います。
 
-- 手元: Node は、mise や asdf が `.tool-versions` のバージョンを入れます。Python は、uv が `.python-version` のバージョンを取得して使います
+- 手元: Node は、nodenv や fnm などが `.node-version` のバージョンを入れます。Python は、uv が `.python-version` のバージョンを取得して使います
 - 手元のバージョンがずれていると、テストが落ちます。`tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、管理場所と比べます
 - CI: 「CI」の表のとおりです
 - 本番のイメージ: `api/Dockerfile` は、バージョンをビルドの引数（`PYTHON_VERSION`、`UV_VERSION`）で受け取ります。`scripts/build-api.sh` が渡します。引数を付け忘れると、`FROM` が成り立たずに失敗します
@@ -297,11 +297,11 @@ Dependabot 用の Dockerfile の `FROM` の間には、行を挟んでいます�
 `version-sync` がするのは、決まった場所の値を決まった場所に写すことだけです（`automation/versions.py` の `sync`）。
 
 - 計算は、鍵を持たない job で行います。PR の head を取り出し、バージョンを写します
-- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、管理場所の 3 つ（`.python-version`、`.tool-versions`、`infra/versions.tf`）に限っています
+- push は、鍵を持つ job で行います。渡されたファイルを App のトークンでコミットするだけで、PR の中身は取り出しません。積めるファイルは、管理場所の 3 つ（`.python-version`、`.node-version`、`infra/versions.tf`）に限っています
 - 対象は、Dependabot が push した、`versions/Dockerfile` だけを変える PR です
 - バージョンの記述が見つからない、2 か所ある、という場合は、何もせずに失敗します。失敗の理由と直し方を、PR にコメントで残します。PR の CI も、Dependabot 用の Dockerfile と管理場所の食い違いで落ちたままになります
 
-Renovate は、`.python-version` や `.tool-versions` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、Dependabot 用の Dockerfile と同期の仕掛けで補っています。
+Renovate は、`.python-version` や `.node-version` を直接書き換えられます。このリポジトリは Dependabot を使うと決めているので、Dependabot 用の Dockerfile と同期の仕掛けで補っています。
 
 Dependabot 用の Dockerfile のイメージは Docker Hub のものに限ります。cooldown が Docker Hub のイメージにしか効かないためです。ほかのレジストリのイメージを書くと、CI が落ちます。
 
@@ -400,7 +400,7 @@ PR が出ると、`.python-version` などのバージョンを書き換える�
 | 道具 | バージョンのあるファイル | このファイルを読む道具の例 |
 |---|---|---|
 | Python | `.python-version` | uv、pyenv、mise、asdf |
-| Node | `.tool-versions` | mise、asdf |
+| Node | `.node-version` | nodenv、fnm。mise と asdf は設定が要る |
 | uv | 決まったバージョンは無い。`pyproject.toml` の `required-version` の下限（0.13）より新しければよい | uv 自身（古すぎると止まる） |
 | Terraform | `infra/versions.tf` の `required_version` | terraform 自身（バージョンが違うと止まる） |
 
@@ -413,7 +413,16 @@ PR が出ると、`.python-version` などのバージョンを書き換える�
 手元の Python と Node のバージョンが管理場所と違うと、テストが落ちます。道具には依りません。
 `tests/test_toolchain.py` が Python を、`web/src/toolchain.test.js` が Node を、ファイルのバージョンと比べます。
 
-確かめたのは、mise が `.tool-versions` と `.python-version` からバージョンを読むところ（`mise ls --current`）までです。それぞれの道具で実際に入れるところは、試していません。
+`.node-version` を読む道具は、次のとおりです。それぞれの道具の文書で確かめました。実際に入れるところは、試していません。
+
+| 道具 | `.node-version` の扱い |
+|---|---|
+| nodenv | そのまま読む |
+| fnm | 読む。ディレクトリに入ったときに切り替えるには、シェルの設定に `fnm env --use-on-cd` を使う |
+| mise | 設定が要る。`mise settings add idiomatic_version_file_enable_tools node` |
+| asdf | 設定が要る。`~/.asdfrc` に `legacy_version_file = yes` と書く |
+
+古い mise（2025.2.7）は、設定なしで `.node-version` と `.python-version` を読みました（`mise ls --current` で確かめました）。
 
 最初に `uv sync` を動かします。作業は、`uv run just <レシピ>` で動かします。レシピは直下の `justfile` にあり、`uv run just --list` で、一覧と説明が出ます。
 
@@ -430,7 +439,7 @@ just は、ruff や pytest と同じ開発用の依存です（PyPI の `rust-ju
 ふだんの更新では、人はファイルを編集しません。レビューと承認だけを行います。
 minor や major を上げるなど、人が意図してバージョンを変えるときは、次の 2 つを行います。
 
-1. 管理場所（`.python-version`、`.tool-versions`、`infra/versions.tf`）を書き換える
+1. 管理場所（`.python-version`、`.node-version`、`infra/versions.tf`）を書き換える
 2. `uv run just align` を動かす。Dependabot 用の `versions/Dockerfile` が、管理場所に揃う
 
 `uv run just align` を動かし忘れた PR は、CI の `automation` が落とします。

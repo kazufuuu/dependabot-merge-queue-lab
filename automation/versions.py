@@ -3,7 +3,7 @@
 バージョンの管理場所は、それぞれの道具が自分で読む場所に置く。
 
 - Python: .python-version（uv が読む。api/ からも、親のディレクトリのこのファイルが読まれる）
-- Node: .tool-versions（手元では mise や asdf が読む。CI では setup-node が読む）
+- Node: .node-version（手元では fnm や nodenv などが読む。CI では setup-node が読む）
 - Terraform: infra/versions.tf の required_version（terraform が読む）
 
 uv は、ここでは管理場所を持たない。ライブラリと同じく、pyproject.toml の開発用の依存に範囲で書き、
@@ -35,7 +35,7 @@ from pathlib import Path
 
 SENTINEL = "versions/Dockerfile"
 PYTHON_VERSION_FILE = ".python-version"
-TOOL_VERSIONS = ".tool-versions"
+NODE_VERSION_FILE = ".node-version"
 TERRAFORM_FILE = "infra/versions.tf"
 UV_LOCK = "uv.lock"
 DOCKERFILES = (SENTINEL, "api/Dockerfile")
@@ -64,14 +64,14 @@ def one(pattern: str, text: str, where: str) -> re.Match[str]:
 
 PATTERNS = {
     "python": rf"^({VERSION})\s*$",
-    "node": rf"^nodejs ({VERSION})\s*$",
+    "node": rf"^({VERSION})\s*$",
     "terraform": rf'^\s*required_version\s*=\s*"=\s*({VERSION})"\s*$',
 }
 
 
 SOURCES = {
     "python": PYTHON_VERSION_FILE,
-    "node": TOOL_VERSIONS,
+    "node": NODE_VERSION_FILE,
     "terraform": TERRAFORM_FILE,
 }
 

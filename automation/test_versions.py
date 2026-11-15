@@ -36,7 +36,7 @@ class VersionsTest(unittest.TestCase):
         self.assertEqual({name: actual[name] for name in versions.IMAGES}, versions.read_sentinel(self.root))
 
     def test_node_is_read_from_tool_versions(self):
-        (self.root / versions.TOOL_VERSIONS).write_text("nodejs 24.99.1\n")
+        (self.root / versions.NODE_VERSION_FILE).write_text("24.99.1\n")
         self.assertEqual(versions.read_sources(self.root)["node"], "24.99.1")
         self.assertEqual(len(versions.check(self.root)), 1)
 
@@ -67,7 +67,7 @@ class VersionsTest(unittest.TestCase):
         changed = versions.sync(self.root)
         self.assertEqual(
             sorted(changed),
-            sorted([versions.PYTHON_VERSION_FILE, versions.TOOL_VERSIONS, versions.TERRAFORM_FILE]),
+            sorted([versions.PYTHON_VERSION_FILE, versions.NODE_VERSION_FILE, versions.TERRAFORM_FILE]),
         )
         self.assertEqual(
             versions.read_sources(self.root),
@@ -84,7 +84,7 @@ class VersionsTest(unittest.TestCase):
 
     def test_align_copies_sources_to_sentinel(self):
         (self.root / versions.PYTHON_VERSION_FILE).write_text("3.13.99\n")
-        self.edit(versions.TOOL_VERSIONS, f"nodejs {versions.read_sources(self.root)['node']}", "nodejs 24.99.1")
+        self.edit(versions.NODE_VERSION_FILE, versions.read_sources(self.root)["node"], "24.99.1")
         self.assertEqual(len(versions.check(self.root)), 2)
         self.assertEqual(versions.align(self.root), ["python", "node"])
         self.assertEqual(versions.check(self.root), [])

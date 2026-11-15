@@ -49,7 +49,7 @@ image *args:
 versions:
     @python3 automation/versions.py show
 
-# .python-version、.tool-versions、infra/versions.tf を書き換えたあとに動かす。Dependabot 用のファイルを揃える
+# .python-version、.node-version、infra/versions.tf を書き換えたあとに動かす。Dependabot 用のファイルを揃える
 align:
     python3 automation/versions.py align
     python3 automation/versions.py check

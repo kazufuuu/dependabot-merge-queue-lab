@@ -127,7 +127,7 @@ class ChangedFilesTest(unittest.TestCase):
         python = changed_files(self.root, "python", (3, 13, 99))
         node = changed_files(self.root, "node", (24, 99, 1))
         self.assertEqual(sorted(python), sorted([versions.PYTHON_VERSION_FILE, versions.SENTINEL]))
-        self.assertEqual(sorted(node), sorted([versions.TOOL_VERSIONS, versions.SENTINEL]))
+        self.assertEqual(sorted(node), sorted([versions.NODE_VERSION_FILE, versions.SENTINEL]))
         self.assertIn("python:3.13.99-slim", python[versions.SENTINEL])
         self.assertNotIn("24.99.1", python[versions.SENTINEL])
         self.assertNotIn("3.13.99", node[versions.SENTINEL])

@@ -15,7 +15,7 @@
 | 8 | 満たす | タスクランナーの just を足した。PyPI の `rust-just` を、直下の `pyproject.toml` の開発用の依存に範囲で書いたので、uv と同じ設定が追う。just の更新の PR が出るところは、新しいバージョンがまだ無いので、見ていない |
 | 9 | 一部 | 判定と、Python と Node の見分けは入れた。uv は PyPI のパッケージなので、Dependabot のセキュリティアップデートに任せる。ライブラリのセキュリティアップデートが自動でマージされるところは、実物でまだ確かめていない |
 | 10 | 満たす | なし |
-| 11 | 満たす | Python と Node は、バージョンを書いたファイル（`.python-version`、`.tool-versions`）を、手元の道具、CI、本番のイメージのビルドが読む。手元のバージョンが違うとテストが落ちる。uv は、CI と本番のイメージが `uv.lock` の同じバージョンを使う。手元の uv は下限（0.13）だけ。道具で実際に入れるところは試していない。Node のテストが落ちる側は確かめていない |
+| 11 | 満たす | Python と Node は、バージョンを書いたファイル（`.python-version`、`.node-version`）を、手元の道具、CI、本番のイメージのビルドが読む。手元のバージョンが違うとテストが落ちる。uv は、CI と本番のイメージが `uv.lock` の同じバージョンを使う。手元の uv は下限（0.13）だけ。道具で実際に入れるところは試していない。Node のテストが落ちる側は確かめていない |
 | 12 | 満たす | なし |
 | 13 | 満たす | 依存ごとの PR にしたあとの CI の回数は、PR 1 本につき 1 回（README の「PR の本数と CI の回数」）。同じロックファイルの patch が 3 本以上重なった場合は、測れていない。CI の job は、手元と同じ `justfile` のレシピを呼ぶ。job とレシピの名前は同じ。Python を使う job は `uv run just` で呼ぶ。ほかの job は、pipx で同じバージョンの just を入れる。かかる時間は、1 つの job につき 3 秒ほど（[PR #94](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/94)）。`uv run just` に揃えると 8〜10 秒かかったので、揃えていない（[PR #95](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/95)） |
 | 14 | 満たす | App の鍵の入れ替え、App の停止と削除は、試していない |

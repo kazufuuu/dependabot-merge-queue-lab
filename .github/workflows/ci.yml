@@ -20,7 +20,7 @@ concurrency:
 # job とレシピは 1 対 1 で、名前も同じにしてある。落ちたときは、同じ名前のレシピを手元で動かせば再現できる。
 # バージョンは管理場所から読む。
 # - Python: .python-version（setup-python が読んで入れる）
-# - Node: .tool-versions（setup-node が読む）
+# - Node: .node-version（setup-node が読む）
 # - Terraform: infra/versions.tf（automation/versions.py が読んで渡す）
 # - uv、just: uv.lock に入っているバージョン（automation/versions.py が読んで渡す）
 # Python は setup-python が入れ、uv には取ってこさせない（UV_PYTHON_DOWNLOADS）。
@@ -84,7 +84,7 @@ jobs:
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v7.0.0
         with:
-          node-version-file: .tool-versions
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: just を入れる
