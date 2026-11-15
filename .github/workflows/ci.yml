@@ -26,7 +26,7 @@ jobs:
       - name: 版を正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
@@ -47,7 +47,7 @@ jobs:
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           working-directory: api
           version: ${{ steps.versions.outputs.uv }}
