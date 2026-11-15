@@ -26,7 +26,7 @@ jobs:
       - name: 版を正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
@@ -47,7 +47,7 @@ jobs:
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           working-directory: api
           version: ${{ steps.versions.outputs.uv }}
@@ -85,7 +85,7 @@ jobs:
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
