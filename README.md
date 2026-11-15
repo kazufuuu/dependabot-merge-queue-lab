@@ -131,7 +131,7 @@ PR にまとめるのは、バージョンが連動するライブラリ群だ�
 | 測ったもの | 数字 |
 |---|---|
 | 同時に開いている Dependabot の PR | 14 本（uv の直下 3、`/api` 3、npm 3、Terraform 1、Dependabot 用の Dockerfile 3、Actions 1）。2026-11-15 の終わりの時点 |
-| 自動でマージされた PR | 2 日間で 9 本（PR #12、#15、#34、#70、#79、#85、#86、#87、#93）。依存ごとの形になってからは 5 本（#79、#85、#86、#87、#93）。Dependabot の push からマージまでは、測った 4 本で、2 分 47 秒、2 分 47 秒、2 分 11 秒、2 分 24 秒 |
+| 自動でマージされた PR | 実物で確かめた例は、置き方を `.github` の下へ移す前に #85・#87・#93 など、移した後に [#108](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/108)・[#109](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/109)。Dependabot の push からマージまで 2〜3 分。累計の本数は、手で書くと古くなるので `dependabot-stats` の出力（週 1 回）で見る |
 | CI の回数 | PR 1 本につき 1 回。自動でマージされる PR は、マージキューの CI が 1 回と、main に入ったあとの CI が 1 回加わる（PR #79 では、合わせて 3 回）。バージョンの同期がコミットを積む PR は、もう 1 回 |
 | 同じロックファイルを変える PR どうしの衝突 | 起きなかった。`uv.lock` を変える PR が 4 本開いた状態で 1 本が入っても、残りは作り直されず、CI も走り直さなかった |
 
@@ -204,7 +204,7 @@ GitHub の受信箱では、PR 1 本が通知 1 件にまとまります。こ�
 | 割り振られたレビュワー | レビューの依頼（`review_requested`） | 同じ。team の中で回るので、1 人あたりは人数で割った数になる |
 
 週に最大 17 件は、設定から出した上限です。ロックファイルだけが変わりうる依存の数（uv の直下 7、`/api` 4、npm 4、Terraform 2）で、全部に patch の更新が出た週の数です。
-実測は、2 日間で 9 本（PR #12、#15、#34、#70、#79、#85、#86、#87、#93）です。依存ごとの形になってからは、5 本（#79、#85、#86、#87、#93）です。メールの通数は確かめていません。
+自動でマージの実物の例は、[PR #108](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/108) と [PR #109](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/109)（ruff の patch。App が承認し、merge_group の CI が通ってマージ。PR から約 3 分）です。累計の本数は、手で書くと古くなるので、`dependabot-stats` の出力で見ます。メールの通数は確かめていません。
 
 #### 無視するための設定
 
@@ -253,6 +253,7 @@ runner にはコンパイラが入っていますが、slim のイメージに�
 Python は setup-python が入れ、uv には取ってこさせません（`UV_PYTHON_DOWNLOADS: never`）。
 uv は、取ってこられる Python の一覧を自分の中に持っています。古い uv は新しい Python を知りません。uv に取ってこさせると、Python の patch の更新が、uv のバージョンのせいで落ちます。
 必須のチェックは、全部の結果をまとめた `all-green` の 1 つです。テストとイメージのビルドの、どれか 1 つでも落ちると、自動マージされません。
+この `all-green` は、ruleset で発行元を GitHub Actions（`integration_id` 15368）に固定しています。別の発行元（App や、人が貼る commit status）が同じ名前のチェックを立てても、必須のチェックとしては数えません。
 マージキューでは、最新の main と合わせた状態で同じ CI が動きます。ブランチが古くても止まりません。
 
 ### ランタイムと Terraform 本体のバージョン
