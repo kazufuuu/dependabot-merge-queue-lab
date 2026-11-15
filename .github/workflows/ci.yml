@@ -22,11 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@v6
       - name: 版を正本から読む
         id: versions
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
@@ -42,12 +42,12 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@v6
       - name: 版を正本から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           working-directory: api
           version: ${{ steps.versions.outputs.uv }}
@@ -63,8 +63,8 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7.0.0
         with:
           node-version-file: .tool-versions
           cache: npm
@@ -80,12 +80,12 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@v6
       - name: Terraform の版を正本から読む
         id: versions
         working-directory: .
         run: python3 automation/versions.py show >> "$GITHUB_OUTPUT"
-      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@v6
       - name: 振り分けと版の同期のテスト
         run: python3 -m unittest discover -s automation -v
       - name: 版の正本と見張り役が揃っていることを確かめる
@@ -110,8 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v6
         with:
           path: /tmp/buildcache
           key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', 'pyproject.toml') }}
