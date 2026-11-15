@@ -164,6 +164,16 @@ App がしないことは次のとおりです。
 
 条件 4 は、この検証の途中で足しました。足す前は、人が Dependabot のコミットに戻した PR #34 が自動マージされました（14:34 に kazufusa が戻し、14:36 にマージ）。入った内容は Dependabot が作ったものですが、過去の更新を人の判断で入れ直せる状態でした。足したあとは、同じ操作が弾かれます（上の表の 3 行目）。
 
+条件 4 の確かめ方を、さらに絞り込みました。前は、head のコミットで動いた CI の実行の主体だけを見ていました。この見方には、穴がありました。書き込み権限のある人が、自分のブランチに置いた workflow の `GITHUB_TOKEN` で、Dependabot の PR のブランチに、過去の本物の Dependabot のコミットを force push したとします。`GITHUB_TOKEN` の push は workflow を起こさないので、人を主体とする新しい実行ができません。その SHA には、元の PR で Dependabot が起こした成功の実行だけが残り、前の見方では通ってしまいます。入る中身は本物の Dependabot の patch ですが、人が閉じた更新を、人の判断で入れ直せます。
+
+直して、CI の実行を、その PR 自身のブランチのものだけに絞りました（`head_branch` と `head_repository` で選ぶ）。実物で確かめた前後の違いは、次のとおりです。本物の Dependabot のコミット（開いている [PR #80](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/80) の head）で見ました。
+
+- 前（ブランチで絞らない）: その SHA の実行の主体は `["dependabot[bot]"]`。どの PR のブランチに据えても通る。
+- 後、その SHA 自身のブランチに絞る: `["dependabot[bot]"]`。本物の PR は、今までどおり通る（実物の自動マージ [PR #108](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/108)、[PR #109](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/109) で確かめた）。
+- 後、別のブランチに絞る: `[]`。別の PR のブランチに据えられた SHA は、主体を確かめられず、人に回る。
+
+攻撃そのもの（人のブランチの workflow から force push する）は、再現のために main へ攻撃用の workflow を置く必要があり、置きたくないので、実物では流していません。判定の分かれ目（CI の実行の絞り込み）を、実物のデータで前後に当てて確かめました。
+
 ## 鍵の扱い
 
 基本の形は次のとおりです。
@@ -220,7 +230,7 @@ App がしないことは次のとおりです。
 
 この検証は、人が 1 人だけの組織で行いました。
 ruleset は「自分の PR を自分で承認できない」ので、ruleset を入れたあとは、main を変える手段がありません。
-そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 64 回です（2026-11-14 に 15 回、11-15 に 43 回、11-16 に 6 回）。
+そのため、main の変更のたびに、main にかかる ruleset を無効にし、push し、すぐ有効に戻しました。回数は 66 回です（2026-11-14 に 15 回、11-15 に 43 回、11-16 に 8 回）。
 11-15 の途中からは、`owners-lockfiles` と `owners-others` も同時に無効にしています。無効の時間は、それぞれ数秒です。
 組織の監査ログには、ruleset の変更として残るはずです。
 人が 2 人以上いる組織では、この操作は要りません。
