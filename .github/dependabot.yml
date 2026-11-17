@@ -128,13 +128,16 @@ updates:
         applies-to: version-updates
         patterns: ["*"]
 
-  # ===== 試し用（digest の調査）。本番の仕組みではない。確認が済んだら、この下の 3 つの設定と trial-digest/ を消す。 =====
-  # trial-python: 複数ディレクトリの python の FROM を 1 本の PR にまとめられるか（obs e）。
-  # app-a は同じ python の FROM が 2 行（obs d）。現在の digest を書いてあるので、提案できるのはバージョンの更新だけ（obs 4）。
+  # ===== 試し用（digest の調査）。本番の仕組みではない。確認が済んだら、この下の 4 つの設定と trial-digest/ を消す。 =====
+  # 本番の /dependabot と同じ止め方（python は minor と major、node は major を ignore）で、候補を絞る。
+  # ignore は update-type で効く。digest だけの更新は update-type を持たないので、ignore に掛からず残る。
+
+  # trial-python: py-a と py-b を 1 本にまとめる（obs e）。py-a は python の FROM が 2 行（obs d）。
+  # 3.13.16-slim に現在の digest。minor/major を ignore するので、候補は 3.13.18 への patch だけ（obs 4）。
   - package-ecosystem: docker
     directories:
-      - /trial-digest/app-a
-      - /trial-digest/app-b
+      - /trial-digest/py-a
+      - /trial-digest/py-b
     schedule:
       interval: daily
     cooldown:
@@ -142,23 +145,44 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: trial
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       trial-python:
         patterns: ["python"]
 
-  # trial-node-digest: 最新のタグ（24.22.3-slim）に、合わない digest を書いてある。
-  # 提案できるのは、同じタグの digest の付け替えだけ（obs 1）。cooldown は置かない。
+  # trial-py-digest: 最新の patch（3.13.18-slim）に、合わない digest。minor/major を ignore。
+  # 候補は、同じタグ 3.13.18 の digest の付け替えだけ（python の obs 1）。cooldown は置かない。
   - package-ecosystem: docker
-    directory: /trial-digest/nodeapp
+    directory: /trial-digest/py-digest
     schedule:
       interval: daily
     open-pull-requests-limit: 10
     commit-message:
       prefix: trial
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
-  # trial-node-version: 1 つ古いタグ（24.22.2-slim）。新しい 24.22.3 は 7 日より内なので、cooldown で待たされるはず（obs b）。
+  # trial-n-digest: 24 の中で最新の 24.22.3-slim に、合わない digest。major を ignore。
+  # 候補は、同じタグ 24.22.3 の digest の付け替えだけ（node の obs 1）。cooldown は置かない。
   - package-ecosystem: docker
-    directory: /trial-digest/nodeapp2
+    directory: /trial-digest/n-digest
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: trial
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
+  # trial-n-cool: 1 つ古い 24.22.2-slim に、合わない digest。major を ignore、cooldown 7。
+  # 新しい 24.22.3 は 6 日前で cooldown の内（待たされるはず）。その間に、今のタグ 24.22.2 の
+  # digest の付け替えが出るか（土台の修正が 1 日以内に届くか、の肝の場面）。
+  - package-ecosystem: docker
+    directory: /trial-digest/n-cool
     schedule:
       interval: daily
     cooldown:
@@ -166,4 +190,7 @@ updates:
     open-pull-requests-limit: 10
     commit-message:
       prefix: trial
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
   # ===== 試し用ここまで =====
