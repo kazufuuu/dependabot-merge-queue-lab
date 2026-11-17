@@ -193,4 +193,20 @@ updates:
     ignore:
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
+
+  # trial-n-fresh: 24.22.3-slim（24 の最新）に合わない digest。major を ignore、cooldown 7。
+  # 付け替え先の現在の digest（dc26ae）は 6 日前で cooldown の内。cooldown なしの n-digest は出た。
+  # こちらが「待たされる」なら digest にも cooldown が効く。「出る」なら digest は cooldown の外。
+  - package-ecosystem: docker
+    directory: /trial-digest/n-fresh
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: trial
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
   # ===== 試し用ここまで =====
