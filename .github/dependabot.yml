@@ -127,3 +127,43 @@ updates:
       actions:
         applies-to: version-updates
         patterns: ["*"]
+
+  # ===== 試し用（digest の調査）。本番の仕組みではない。確認が済んだら、この下の 3 つの設定と trial-digest/ を消す。 =====
+  # trial-python: 複数ディレクトリの python の FROM を 1 本の PR にまとめられるか（obs e）。
+  # app-a は同じ python の FROM が 2 行（obs d）。現在の digest を書いてあるので、提案できるのはバージョンの更新だけ（obs 4）。
+  - package-ecosystem: docker
+    directories:
+      - /trial-digest/app-a
+      - /trial-digest/app-b
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: trial
+    groups:
+      trial-python:
+        patterns: ["python"]
+
+  # trial-node-digest: 最新のタグ（24.22.3-slim）に、合わない digest を書いてある。
+  # 提案できるのは、同じタグの digest の付け替えだけ（obs 1）。cooldown は置かない。
+  - package-ecosystem: docker
+    directory: /trial-digest/nodeapp
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: trial
+
+  # trial-node-version: 1 つ古いタグ（24.22.2-slim）。新しい 24.22.3 は 7 日より内なので、cooldown で待たされるはず（obs b）。
+  - package-ecosystem: docker
+    directory: /trial-digest/nodeapp2
+    schedule:
+      interval: daily
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: trial
+  # ===== 試し用ここまで =====
