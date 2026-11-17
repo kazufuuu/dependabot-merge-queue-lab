@@ -9,7 +9,7 @@
 # FROM の間には行を挟む。隣り合う行を別々の PR が変えると、片方が入ったあとに、もう片方が衝突する。
 
 # Python（管理場所は .python-version）
-FROM python:3.13.16-slim AS python
+FROM python:3.13.18-slim AS python
 
 # Node（管理場所は .node-version）
 FROM node:24.20.0-slim AS node
