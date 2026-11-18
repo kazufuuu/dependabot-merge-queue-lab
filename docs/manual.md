@@ -338,7 +338,31 @@ workflow の無効化と再開は、実際に行いました。
 | App の鍵の作り直し | 組織の決まりに従う | [github-app.md](github-app.md) の「鍵の作り直し」。試していない |
 | `gh actions-lock` のバージョンの見直し | 拡張の新しいバージョンが出たとき | ロックファイルの書式は変わることがある。新しいバージョンで `uv run just lock-actions` を動かし、CI が通ることを確かめてから上げる |
 
+### リリースの記録と、脆弱性の調べ方
+
+本番のイメージをリリースすると、入っているものの一覧（SBOM）と、ビルドの来歴（provenance）が、自動で残ります。仕組みは[README](../README.md)の「リリースのときの記録」にあります。ここでは、動かし方と、調べ方を書きます。
+
+リリースのしかた
+
+1. リリースするコミットが、main に入っていることを確かめます。main に入っていないコミットのタグでは、release の workflow が途中で止まり、何も出ません。
+2. そのコミットに、バージョンのタグ（`v1.2.3` の形）を打ち、push します。`git tag v1.2.3 <コミット> && git push origin v1.2.3`。
+3. タグを打てるのは、tags の ruleset で許された人（リポジトリの管理者の役）だけです。
+4. release の workflow が動き、イメージを ghcr に push し、SBOM 2 つを GitHub の Release に添付し、署名付きの証明を作ります。実行の要約に、イメージのダイジェスト、使ったベースイメージのダイジェスト、パッケージ数が出ます。
+
+脆弱性が見つかったときの調べ方
+
+- 「このパッケージの、このバージョンが、リリースしたものに入っているか」を調べます。`uv run just sbom-find <タグ> <パッケージ名>`。Release に添付した 2 つの SBOM（イメージの中身＝OS と Python、フロントの本番の依存）の両方を見ます。
+- 例: `uv run just sbom-find v0.0.2 openssl` は、イメージの SBOM から `openssl 3.5.7-1~deb13u3` を出します。`uv run just sbom-find v0.0.2 date-fns` は、フロントの SBOM から `date-fns 4.1.0` を出します。
+- Release の添付は、公開のリポジトリでは誰でも落とせます。だから、この調べ方は、ghcr のイメージが非公開のままでも動きます。
+
+証明（attestation）の確かめ方
+
+- 証明は、release の job の中で、毎回その場で検証しています（`gh attestation verify`）。リリースのたびに、通ることを確かめています。
+- 手元から確かめるときは、`gh attestation verify oci://ghcr.io/kazufuuu/dependabot-merge-queue-lab/api:<タグ> --owner kazufuuu` を動かします。このとき、ghcr のイメージを読むので、`read:packages` の付いたトークンと、`docker login ghcr.io` が要ります。既定の `gh` のトークンには `read:packages` が無く、`403` になります。`gh auth refresh -s read:packages` でスコープを足してから動かします。
+- `sbom-find` も、同じ証明の検証を試みます。トークンに `read:packages` が無いときは、検証を飛ばし、SBOM の照合だけを行います（SBOM の照合は Release の添付を読むので、トークンのスコープは要りません）。
+
 ## 情報システム部門の担当者への案内
 
 GitHub App の作成の依頼、権限、鍵の扱い、悪用への備えは、[app-request.md](app-request.md) にまとめてあります。
 作業の手順は [github-app.md](github-app.md) にあります。
+リリースの記録についての、監査で聞かれることへの答えも、[app-request.md](app-request.md) にあります。

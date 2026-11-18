@@ -1,6 +1,6 @@
 # 要件の達成の状況
 
-[requirements.md](requirements.md) の要件ごとに、どこまで出来ているかを書きます。2026-11-15 時点のものです。
+[requirements.md](requirements.md) の要件ごとに、どこまで出来ているかを書きます。2026-11-18 時点のものです。
 実現の方法は [README](../README.md) に、証拠は [app-request.md](app-request.md) にあります。
 
 | 番号 | 状況 | 残っていること |
@@ -22,6 +22,7 @@
 | 15 | 一部 | 無視するための設定は README に示した。GitHub の文書で確かめたもので、実物では試していない。通知の数は、設定からの上限（週に最大 17 件）で示した。自動でマージされた PR は、2 日間で 9 本。メールの通数は確かめていない |
 | 16 | 満たす | patch、minor、major の 5 件が、1 本の PR にまとまって出た（[PR #69](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/69)）。週 1 本になることは、確認の間隔（週 1 回）からの見込みで、複数の週では見ていない |
 | 17 | 満たす | 種類でまとめるグループをやめた。バージョンが連動する群（vitest と @vitest/coverage-v8）だけをまとめ、2 件が 1 本で出た（[PR #77](https://github.com/kazufuuu/dependabot-merge-queue-lab/pull/77)）。ランタイムのセキュリティアップデートの PR は、Python と Node で分けた。分けた形で PR が出るところは、単体テストだけの裏付け。次のセキュリティのバージョンで確かめる |
+| 18 | 一部 | リリースの workflow（`release.yml`）で、イメージの SBOM（OS と Python）、フロントの本番の依存の SBOM（`npm sbom --omit dev`）、来歴、署名付きの証明を作り、Release に添付する。試しのタグ v0.0.2 で実物を通した。`sbom-find` で、`openssl 3.5.7-1~deb13u3` と `date-fns 4.1.0` が引けた。main に入っていないコミットのタグ（v0.0.99）では、ガードで止まり、何も出なかった。一部の理由: supplier が NOASSERTION、フロントの SBOM は署名が無い（同じコミットの `package-lock.json` から作り Release に添付して結び付ける）、SBOM の step が失敗してもイメージは先に ghcr に push されて残る、走査の道具が動くタグで引かれる。詳しくは [app-request.md](app-request.md) の「リリースの記録と、監査への答え」 |
 
 ## 満たしていない要件を妨げているもの
 
