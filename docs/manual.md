@@ -361,6 +361,21 @@ workflow の無効化と再開は、実際に行いました。
 - 手元から確かめるときは、`gh attestation verify oci://ghcr.io/kazufuuu/dependabot-merge-queue-lab/api:<タグ> --owner kazufuuu` を動かします。このとき、ghcr のイメージを読むので、`read:packages` の付いたトークンと、`docker login ghcr.io` が要ります。既定の `gh` のトークンには `read:packages` が無く、`403` になります。`gh auth refresh -s read:packages` でスコープを足してから動かします。
 - `sbom-find` も、同じ証明の検証を試みます。トークンに `read:packages` が無いときは、検証を飛ばし、SBOM の照合だけを行います（SBOM の照合は Release の添付を読むので、トークンのスコープは要りません）。
 
+SBOM を外へ渡すとき
+
+リリースのたびに SBOM を外へ渡す運用では、次の手順を目安にします。特定の相手や、特定の依頼を前提にした書き方ではありません。
+
+- 渡すファイルは 2 つです。Release の添付の `sbom.spdx.json`（イメージの中身）と `web.sbom.spdx.json`（フロントの本番の依存）です。`gh release download <タグ> -R <owner>/<repo>` で両方を落とすか、Release の画面の Assets から落とします。
+- 渡す前に、相手に次を確かめます。
+  - 形式とそのバージョン（SPDX か CycloneDX か）。この仕組みは SPDX 2.3 を出します。形式ごとの中身は[README](../README.md)の「リリースのときの記録」の「SBOM の形式」にあります。
+  - 必須の項目。下の空になる項目が、相手の受け入れの条件に当たらないか。
+  - 範囲。イメージの中身まで要るか、フロントの依存だけでよいか。
+  - 渡し方。ファイルを添付するか、置き場所に上げるか。
+  - 頻度。リリースのたびか、求めに応じてか。
+  - 脆弱性の一覧も要るか。SBOM とは別に。
+- この仕組みの SBOM で、空になる項目があります。供給元（supplier。OS のパッケージの一部と、フロントは空）、OS のパッケージのハッシュ、確定したライセンス（licenseConcluded）です。相手の受け入れの条件に当たるかもしれないので、先に伝えます。
+- CycloneDX を求められた場合は、作る道具の指定を変えることになります。変換と走査し直しの手は[README](../README.md)の「SBOM の形式」にありますが、リリースの workflow を CycloneDX に変えることは、この見本では試していません。
+
 ## 情報システム部門の担当者への案内
 
 GitHub App の作成の依頼、権限、鍵の扱い、悪用への備えは、[app-request.md](app-request.md) にまとめてあります。

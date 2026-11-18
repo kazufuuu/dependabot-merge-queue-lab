@@ -420,11 +420,12 @@ PR が出ると、`.python-version` などのバージョンを書き換える�
 
 ベースイメージは、タグを patch まで固定しますが、ダイジェスト（`sha256:…`）では固定しません。Docker Hub の公式イメージは、同じタグのまま中身が作り直されます。本番のイメージをビルドするたびに、その時点の最新の作り直しを引きます。だから、同じコミットでも、リリースの日が違えば、入っているものが違いえます。固定しない理由は、Dependabot の側に、同じタグのダイジェストだけの更新を止める試験的な切り替え（dependabot-core の #15103）があり、有効にされると、土台の修正が知らせなしに止まるためです。固定しない今の形は、ビルドのたびに最新を引くので、その点は安全です。
 
-ダイジェストを固定しない代わりに、リリースのたびに、使ったものを記録します。記録は、リリースごとに作り直します。言葉を 3 つ、先に説明します。
+ダイジェストを固定しない代わりに、リリースのたびに、使ったものを記録します。記録は、リリースごとに作り直します。言葉を 4 つ、先に説明します。
 
 - SBOM: イメージに入っているものの一覧（Software Bill of Materials）。
 - 来歴（provenance）: 何を使って、どこで、どのコミットからビルドしたかの記録。
 - 証明（attestation）: イメージのダイジェストに結び付いた、GitHub が署名した記録。あとから本物だと確かめられます。
+- SPDX: SBOM を書くための標準の形式の 1 つ。もう 1 つよく使われるのが CycloneDX です。この仕組みが出すのは SPDX 2.3 です（下の「SBOM の形式」）。
 
 リリースの workflow（`.github/workflows/release.yml`）は、バージョンのタグ（`v*`）を push したときだけ動きます。api のイメージを、今の Dockerfile のまま（タグ止まり）ビルドし、ghcr に push して、次を残します。
 
@@ -439,11 +440,80 @@ PR が出ると、`.python-version` などのバージョンを書き換える�
 - 載せる: リリースしたものに、コードとして入って出ていくもの。最終のイメージに残る OS のパッケージと Python のライブラリ（イメージの SBOM）。フロントの本番の依存（フロントの SBOM）。フロントのライブラリは、ビルドで出荷されるファイルに入り、`node_modules` としては残らないので、イメージの走査には出ません。だから、ロックファイルから別に作ります。
 - 載せない: ビルドのときだけ使い、出荷されるものにコードが入らない道具。フロントの開発用の依存（テストや型の道具）、uv、Node のイメージそのもの。これらは、来歴（何を使ってビルドしたか）とロックファイル（GitHub の依存の一覧と Dependabot の警告）で追います。
 
+Go の実行ファイルを足す場合は、フロントと違って、別の SBOM を作らずに済みます。Go は、組み込んだモジュールとバージョンを実行ファイルに書き込むので、走査の道具がそれを読みます。リポジトリの外の使い捨てのイメージで試しました（2026-11-18、docker 29.5.2、buildx v0.34.0、syft v1.51.0）。`golang:1.23-bookworm` の段で `github.com/google/uuid v1.6.0` を使う小さいプログラムを `CGO_ENABLED=0`、`-trimpath`、`-ldflags="-s -w"` でビルドし、実行ファイルだけを `python:3.13.16-slim` の最終の段に入れて、`--sbom=true` でビルドしました。イメージの SBOM に golang の 3 件が載りました。自分のモジュール（バージョンは UNKNOWN）、`github.com/google/uuid v1.6.0`、`stdlib go1.23.12` です。来歴には golang のベースイメージがダイジェスト付きで載りました。`-s -w` と `-trimpath` では消えません。実行ファイルを圧縮したり難読化したりすると読めなくなる見込みですが、試していません。この見本には Go の段は入れていません。Go を足すなら、`go.mod` と Go のバージョンも Dependabot の対象に入れます（要件 8）。
+
 「この脆弱性のバージョンが、リリースしたものに入っているか」は、`uv run just sbom-find <タグ> <パッケージ名>` で調べます。Release に添付した 2 つの SBOM の両方を見ます。例を[マニュアル](docs/manual.md)に書きました。
 
 Release の添付（SBOM）は、公開のリポジトリでは誰でも落とせます。持ち帰る先が非公開なら、リポジトリを読める人だけが落とせます。ghcr のイメージ自体は非公開のままで、`sbom-find` は Release の添付（公開）を読むので、イメージが非公開でも調べられます。
 
 このリポジトリには、本番へ出すリリースの流れはありません。この workflow は見本で、持ち帰る先のリリースの workflow の形を示します。試しのタグ `v0.0.2` で、実物を通しました。
+
+#### SBOM の形式
+
+2 つの SBOM は、どちらも SPDX の JSON です。実物のファイル（`v0.0.2` の Release の添付）の `spdxVersion` は `SPDX-2.3`、`dataLicense` は `CC0-1.0` です。名前・バージョン・作る道具は、次のとおりです。
+
+| ファイル | 形式 | 作る道具 | 件数 |
+|---|---|---|---|
+| `sbom.spdx.json` | SPDX 2.3 の JSON | BuildKit の走査（`creationInfo` は `syft-v1.51.0`、`buildkit-v0.34.2`、`Organization: Anchore, Inc`） | 124 |
+| `web.sbom.spdx.json` | SPDX 2.3 の JSON | npm（`npm sbom`。`creationInfo` は `npm/cli-11.19.0`） | 3（`web` と `date-fns`、`zod`） |
+
+1 件のパッケージは、次のように書かれます（イメージの SBOM の `openssl`）。受け取る側は、何の項目が来るかを、これで分かります。
+
+```json
+{
+  "name": "openssl",
+  "versionInfo": "3.5.7-1~deb13u3",
+  "supplier": "NOASSERTION",
+  "licenseConcluded": "NOASSERTION",
+  "licenseDeclared": "Apache-2.0 AND LicenseRef-Artistic AND GPL-1.0-only AND GPL-1.0-or-later",
+  "externalRefs": [
+    { "referenceType": "purl",      "referenceLocator": "pkg:deb/debian/openssl@3.5.7-1~deb13u3?arch=amd64&distro=debian-13.7" },
+    { "referenceType": "cpe23Type", "referenceLocator": "cpe:2.3:a:openssl:openssl:3.5.7-1~deb13u3:*:*:*:*:*:*:*" }
+  ]
+}
+```
+
+載る項目と、空になる項目は、次のとおりです。公的な目安（CISA の SBOM 最小要素。日本では経産省の SBOM の手引が、同じ NTIA 由来の要素を指す）の項目の名前に合わせています。数字は、実物の `v0.0.2` のファイルを数えたものです。
+
+| 項目 | イメージの SBOM（124 件） | フロントの SBOM（3 件） |
+|---|---|---|
+| 名前 | 載る | 載る |
+| バージョン | 載る（124 件中 123 件） | 載る |
+| 一意の識別子 | purl 116 件。OS のパッケージは cpe も載る | purl（`pkg:npm/...`）。cpe は無い |
+| 依存関係 | 載る | 載る |
+| 作成者（作った道具） | 載る（syft、BuildKit） | 載る（npm） |
+| 作成の時刻 | 載る | 載る |
+| ハッシュ | 空（124 件とも無し） | SHA512（`date-fns`、`zod`。root は無し） |
+| ライセンス | 宣言は 90 件、確定は 5 件（ほかは NOASSERTION） | 宣言は MIT（root は NOASSERTION） |
+| 供給元（supplier） | 一部（syft が deb の Maintainer を入れる。60 件。`openssl` を含む残りは NOASSERTION） | 無し |
+
+SPDX と CycloneDX は、どちらも SBOM の標準の形式で、どちらも標準として通ります。SPDX は Linux Foundation が進め、ISO/IEC 5962 です。CycloneDX は OWASP のもので、脆弱性や VEX の扱いに強いです。この仕組みが SPDX を出すのは、BuildKit の走査（`--sbom`）が SPDX の JSON を既定で出すためです。
+
+CycloneDX が要るときの手を、リポジトリの外の手元で 1 回試しました（syft v1.51.0、npm 11.6.2）。道具は、公開から日数のたったバージョンを使いました（syft v1.51.0 は 2026-08-10 のビルド）。
+
+- イメージの側は 2 通りあります。
+  - 出来た SPDX を変換する: `syft convert sbom.spdx.json -o cyclonedx-json=image.cdx.json`。出来た CycloneDX の `specVersion` は 1.7 でした。124 のパッケージ（`library` 123、`operating-system` 1）がそのまま移り、ファイルの 2680 件も移って、合計 2804 の component になりました。`openssl` の名前・バージョン・purl・ライセンスは残り、supplier は空のままです。
+  - イメージを走査し直す: `syft <イメージ> -o cyclonedx-json`。手元の OCI レイアウトで、このコマンドが CycloneDX を出すことは確かめました。ただし、リリースしたイメージ（非公開の ghcr）を走査し直すには `read:packages` のトークンが要り、ここでは走らせていません。
+  - 情報を落とさないのは、変換のほうです。変換は、署名付きの証明が結び付く相手（ビルドの時点の SPDX）と同じ中身を保ちます。走査し直すのは別の走査なので、件数や項目がずれることがあります。
+- フロントの側: `npm sbom --sbom-format cyclonedx --omit dev`。出来た CycloneDX の `specVersion` は 1.5（npm 11.6.2）でした。component は 2 件（`date-fns`、`zod`。root は `metadata` に移る）で、SPDX の側と同じ依存です。
+- CycloneDX の形式のバージョンは、道具で違いました（syft は 1.7、npm は 1.5）。
+- リリースの workflow を CycloneDX に変えることは、この見本では試していません。作る道具の出力の指定を変えることになります。
+
+#### かかる時間
+
+試しのリリース `v0.0.2`（[実行 44205910873](https://github.com/kazufuuu/dependabot-merge-queue-lab/actions/runs/44205910873)）で測りました。全体で 87 秒です。内訳は、次のとおりです。
+
+| 段階 | 秒 |
+|---|---|
+| 準備（setup-python、setup-uv、setup-node） | 13 |
+| ビルドと SBOM と来歴と push | 34 |
+| SBOM の取り出し | 2 |
+| フロントの SBOM | 2 |
+| 証明の作成（来歴 8、SBOM 11） | 19 |
+| 検証 | 4 |
+| Release の作成と添付 | 3 |
+
+SBOM の走査そのものは、手元のビルドの記録で 2 秒ほどで、走査の道具の取得に 7 秒ほどかかります。SBOM を付けない CI の `image` の job は 39 秒です。リリースの workflow は、タグを打ったときだけ動き、PR の CI には足していません。イメージが大きくなれば走査は延びる見込みですが、本物の大きさでは測っていません。
 
 ## 手元の始め方
 
