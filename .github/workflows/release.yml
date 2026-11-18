@@ -29,6 +29,15 @@ jobs:
       IMAGE: ghcr.io/${{ github.repository }}/api
       VERSION: ${{ github.ref_name }}
     steps:
+      # タグの名前を、この後 docker のタグや gh release に渡す。決めた形（v1.2.3）だけを通す。
+      # 形を絞らないと、タグの名前に紛れたシェルの記号が、後の step で実行される余地が残る。
+      - name: タグの名前が、決めた形であることを確かめる
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::タグ $VERSION は、リリースの形（例 v1.2.3）ではありません。"
+            exit 1
+          fi
+
       - uses: actions/checkout@v6.0.3
         with:
           fetch-depth: 0

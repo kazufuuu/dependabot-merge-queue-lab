@@ -2,6 +2,9 @@
 # CI も同じレシピを呼ぶ（.github/workflows/ci.yml）。手元と CI で、動かすコマンドを揃えるため。
 # just は、ruff や pytest と同じ開発用の依存（rust-just）。バージョンは uv.lock が決める。
 
+# レシピの引数を "$@" で安全に渡せるようにする（image に渡すタグなどを、シェルに再解釈させない）。
+set positional-arguments
+
 # レシピの一覧を出す
 default:
     @{{ just_executable() }} --list --unsorted
@@ -43,7 +46,7 @@ automation:
 
 # 本番の API のイメージをビルドする（引数は docker build に渡る。例: just image -t api）
 image *args:
-    api/build.sh {{ args }}
+    api/build.sh "$@"
 
 # 使っているバージョン（Python、Node、Terraform、uv、just）を出す
 versions:
