@@ -64,6 +64,11 @@ jobs:
         with:
           version: ${{ steps.versions.outputs.uv }}
           enable-cache: true
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: ghcr にログインする
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -97,6 +102,17 @@ jobs:
             --format '{{ json .SBOM.SPDX }}' > sbom.spdx.json
           echo "SBOM のパッケージ数: $(jq '.packages | length' sbom.spdx.json)"
 
+      # フロントの「本番の依存」の一覧。イメージの SBOM には、最終のイメージに残るものしか載らない。
+      # フロントのライブラリ（date-fns など）は、ビルドで出荷されるファイルに入るが、node_modules としては
+      # 残らないので、イメージの走査には出ない。web/package-lock.json から、本番の依存だけの SBOM を別に作る。
+      # 開発用の依存（テストや型の道具）は入れない。それらはビルドのときだけ使い、出荷されない。
+      - name: フロントの本番の依存の SBOM を作る
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm sbom --sbom-format spdx --omit dev > "$GITHUB_WORKSPACE/web.sbom.spdx.json"
+          echo "フロントの本番の依存の数: $(jq '.packages | length' "$GITHUB_WORKSPACE/web.sbom.spdx.json")"
+
       # 署名付きの証明。イメージのダイジェストに結び付く。公開リポジトリなので、契約なしで使える。
       # 非公開のリポジトリでは GitHub Enterprise Cloud の契約が要る。その場合は、上の BuildKit の
       # SBOM と来歴（どのレジストリでも契約なしで使える）を土台にする。
@@ -112,15 +128,25 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      # 人が画面から取れるように、Release に SBOM を添付する。
+      # 作った証明を、その場で検証する。非公開のパッケージでも、job のトークンで読める。
+      # 手元から gh attestation verify を動かすには、read:packages の付いたトークンが要る。
+      - name: 証明をその場で検証する
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh attestation verify "oci://$IMAGE@${{ steps.image.outputs.digest }}" \
+            --owner "${{ github.repository_owner }}"
+
+      # 人が画面から取れるように、Release に 2 つの SBOM を添付する。
+      # sbom.spdx.json はイメージの中身（OS と Python）、web.sbom.spdx.json はフロントの本番の依存。
       - name: Release を作り、SBOM を添付する
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release upload "$VERSION" sbom.spdx.json --clobber
+            gh release upload "$VERSION" sbom.spdx.json web.sbom.spdx.json --clobber
           else
-            gh release create "$VERSION" --title "$VERSION" --generate-notes sbom.spdx.json
+            gh release create "$VERSION" --title "$VERSION" --generate-notes sbom.spdx.json web.sbom.spdx.json
           fi
 
       # 実行の要約に、イメージのダイジェスト、使ったベースイメージのダイジェスト、パッケージ数を出す。
@@ -133,7 +159,8 @@ jobs:
             echo ""
             echo "- バージョン: \`$VERSION\`"
             echo "- イメージ: \`$IMAGE@${{ steps.image.outputs.digest }}\`"
-            echo "- SBOM のパッケージ数: $(jq '.packages | length' sbom.spdx.json)"
+            echo "- イメージの SBOM（OS と Python）のパッケージ数: $(jq '.packages | length' sbom.spdx.json)"
+            echo "- フロントの本番の依存の数: $(jq '.packages | length' web.sbom.spdx.json)"
             echo "- 使ったベースイメージ（来歴から）:"
             jq -r '.[]? | select(.uri | test("pkg:docker")) | "  - `\(.uri)` → `sha256:\(.digest.sha256)`"' deps.json
           } >> "$GITHUB_STEP_SUMMARY"

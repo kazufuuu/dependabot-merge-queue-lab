@@ -85,17 +85,22 @@ lock-actions:
 apply-settings repo:
     .github/repo-settings/apply.sh {{ repo }}
 
-# リリースしたイメージの SBOM から、パッケージのバージョンを調べる。例: uv run just sbom-find v0.0.1 openssl
-# 証明（attestation）も検証する。ghcr が private なので、先に docker login ghcr.io と gh auth login が要る。
+# リリースの SBOM から、パッケージのバージョンを調べる。例: uv run just sbom-find v0.0.1 openssl
+# Release に添付した 2 つの SBOM（イメージの中身＝OS と Python、フロントの本番の依存）の両方を見る。
+# Release の添付は公開なので、イメージが private でも調べられる。証明の検証は、できれば行う。
 sbom-find tag package:
     #!/usr/bin/env bash
     set -euo pipefail
-    image="ghcr.io/kazufuuu/dependabot-merge-queue-lab/api:{{ tag }}"
-    echo "イメージ: $image"
-    if gh attestation verify "oci://$image" --owner kazufuuu >/dev/null 2>&1; then
-      echo "証明: 検証できました（gh attestation verify）"
+    repo=kazufuuu/dependabot-merge-queue-lab
+    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+    gh release download "{{ tag }}" --repo "$repo" --dir "$tmp" --pattern 'sbom.spdx.json' --pattern 'web.sbom.spdx.json'
+    for f in "$tmp/sbom.spdx.json" "$tmp/web.sbom.spdx.json"; do
+      [ -f "$f" ] || continue
+      echo "--- $(basename "$f") ---"
+      jq -r --arg p "{{ package }}" '.packages[] | select((.name | ascii_downcase) | contains($p | ascii_downcase)) | "\(.name) \(.versionInfo // "")"' "$f"
+    done
+    if gh attestation verify "oci://ghcr.io/$repo/api:{{ tag }}" --owner kazufuuu >/dev/null 2>&1; then
+      echo "証明: 検証できました"
     else
-      echo "証明: 検証できませんでした（未ログイン、または証明が無い）"
+      echo "証明: 検証は飛ばしました（read:packages の付いたトークンと docker login が要る）"
     fi
-    docker buildx imagetools inspect "$image" --format '{{ "{{" }}json .SBOM.SPDX{{ "}}" }}' \
-      | jq -r --arg p "{{ package }}" '.packages[] | select((.name | ascii_downcase) | contains($p | ascii_downcase)) | "\(.name) \(.versionInfo)"'
