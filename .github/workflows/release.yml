@@ -1,0 +1,130 @@
+name: release
+
+# バージョンのタグ（v*）を push したときだけ動く。PR や、人のブランチからは動かない。
+# タグを打てる人は、tags の ruleset で絞られている（.github/repo-settings/ruleset-tags.json）。
+# このリポジトリにはリリースの流れが無いので、これは見本。持ち帰る先のリリースの workflow の形を示す。
+on:
+  push:
+    tags: ['v*']
+
+# release の job だけに、要る分の権限を与える。PR の中身は、この権限のある job で動かさない。
+permissions:
+  contents: write # Release を作り、SBOM を添付する
+  packages: write # ghcr にイメージを push する
+  id-token: write # 証明（attestation）の署名に使う OIDC
+  attestations: write # 証明を残す
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_PYTHON_DOWNLOADS: never
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/api
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+
+      # タグのコミットが main に入っていること。入っていなければ、ここで止める。
+      # レビューを経ていないコードが、タグを打つだけでリリースされるのを防ぐ（要件 6 と同じ目）。
+      - name: タグのコミットが main 上にあることを確かめる
+        run: |
+          git fetch -q origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "タグのコミット $GITHUB_SHA は main に入っています"
+          else
+            echo "::error::このタグのコミットは main に入っていません。リリースしません。"
+            exit 1
+          fi
+
+      - name: バージョンを管理場所から読む
+        id: versions
+        run: python3 .github/scripts/versions.py show >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.3.2
+        with:
+          version: ${{ steps.versions.outputs.uv }}
+          enable-cache: true
+
+      - name: ghcr にログインする
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # 本番の Dockerfile を、今のまま（タグ止まり。ダイジェストは固定しない）ビルドする。
+      # SBOM（中身の一覧）と来歴（provenance、mode=max）を付けて、ghcr に push する。
+      # 証明の対象にするダイジェストは、--metadata-file から読む。
+      - name: イメージをビルドし、SBOM と来歴を付けて push する
+        run: |
+          docker buildx create --name release --use >/dev/null
+          uv run --locked just image \
+            --builder release \
+            --metadata-file /tmp/meta.json \
+            --provenance=mode=max \
+            --sbom=true \
+            --push \
+            -t "$IMAGE:$VERSION" \
+            -t "$IMAGE:latest"
+
+      - name: イメージのダイジェストを取り出す
+        id: image
+        run: |
+          digest="$(jq -r '."containerimage.digest"' /tmp/meta.json)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "イメージ: $IMAGE@$digest"
+
+      # BuildKit が付けた SBOM を、ファイルに取り出す（SPDX）。Release への添付と、署名付きの証明の対象にする。
+      - name: SBOM をファイルに取り出す
+        run: |
+          docker buildx imagetools inspect "$IMAGE@${{ steps.image.outputs.digest }}" \
+            --format '{{ json .SBOM.SPDX }}' > sbom.spdx.json
+          echo "SBOM のパッケージ数: $(jq '.packages | length' sbom.spdx.json)"
+
+      # 署名付きの証明。イメージのダイジェストに結び付く。公開リポジトリなので、契約なしで使える。
+      # 非公開のリポジトリでは GitHub Enterprise Cloud の契約が要る。その場合は、上の BuildKit の
+      # SBOM と来歴（どのレジストリでも契約なしで使える）を土台にする。
+      - uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+      - uses: actions/attest-sbom@v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # 人が画面から取れるように、Release に SBOM を添付する。
+      - name: Release を作り、SBOM を添付する
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" sbom.spdx.json --clobber
+          else
+            gh release create "$VERSION" --title "$VERSION" --generate-notes sbom.spdx.json
+          fi
+
+      # 実行の要約に、イメージのダイジェスト、使ったベースイメージのダイジェスト、パッケージ数を出す。
+      - name: 実行の要約を書く
+        run: |
+          docker buildx imagetools inspect "$IMAGE@${{ steps.image.outputs.digest }}" \
+            --format '{{ json .Provenance.SLSA.buildDefinition.resolvedDependencies }}' > deps.json || echo '[]' > deps.json
+          {
+            echo "## リリースの記録"
+            echo ""
+            echo "- バージョン: \`$VERSION\`"
+            echo "- イメージ: \`$IMAGE@${{ steps.image.outputs.digest }}\`"
+            echo "- SBOM のパッケージ数: $(jq '.packages | length' sbom.spdx.json)"
+            echo "- 使ったベースイメージ（来歴から）:"
+            jq -r '.[]? | select(.uri | test("pkg:docker")) | "  - `\(.uri)` → `sha256:\(.digest.sha256)`"' deps.json
+          } >> "$GITHUB_STEP_SUMMARY"

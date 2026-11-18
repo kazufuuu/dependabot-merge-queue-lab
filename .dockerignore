@@ -1,0 +1,19 @@
+# ビルドの context はリポジトリの直下。COPY は必要なものだけを指すが、
+# 重いもの・要らないものは、context に送らない。
+.git
+.github
+.handoff
+docs
+infra
+packages
+tests
+dependabot
+**/.venv
+**/__pycache__
+**/node_modules
+**/.terraform
+**/.pytest_cache
+**/.ruff_cache
+**/dist
+**/coverage
+pr

@@ -150,7 +150,7 @@ jobs:
       - uses: actions/cache@v6.0.0
         with:
           path: /tmp/buildcache
-          key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', 'uv.lock') }}
+          key: image-${{ hashFiles('api/Dockerfile', 'api/pyproject.toml', 'api/uv.lock', '.python-version', '.node-version', 'uv.lock', 'web/package.json', 'web/package-lock.json', 'web/tsconfig.json', 'web/tsconfig.build.json', 'web/src/**') }}
           restore-keys: image-
       - name: バージョンを管理場所から読む
         id: versions

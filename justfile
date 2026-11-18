@@ -81,3 +81,18 @@ lock-actions:
 # リポジトリの設定、environment、ruleset を反映する（組織の所有者が動かす。例: just apply-settings owner/repo）
 apply-settings repo:
     .github/repo-settings/apply.sh {{ repo }}
+
+# リリースしたイメージの SBOM から、パッケージのバージョンを調べる。例: uv run just sbom-find v0.0.1 openssl
+# 証明（attestation）も検証する。ghcr が private なので、先に docker login ghcr.io と gh auth login が要る。
+sbom-find tag package:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    image="ghcr.io/kazufuuu/dependabot-merge-queue-lab/api:{{ tag }}"
+    echo "イメージ: $image"
+    if gh attestation verify "oci://$image" --owner kazufuuu >/dev/null 2>&1; then
+      echo "証明: 検証できました（gh attestation verify）"
+    else
+      echo "証明: 検証できませんでした（未ログイン、または証明が無い）"
+    fi
+    docker buildx imagetools inspect "$image" --format '{{ "{{" }}json .SBOM.SPDX{{ "}}" }}' \
+      | jq -r --arg p "{{ package }}" '.packages[] | select((.name | ascii_downcase) | contains($p | ascii_downcase)) | "\(.name) \(.versionInfo)"'
