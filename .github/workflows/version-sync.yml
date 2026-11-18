@@ -28,7 +28,7 @@ jobs:
     outputs:
       payload: ${{ steps.collect.outputs.payload }}
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
       - name: 対象の PR を選び、Dependabot 用の Dockerfile のバージョンを .python-version などへ写す
@@ -58,7 +58,7 @@ jobs:
       checks: read
       actions: read
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
       - name: App のトークンで PR のブランチにコミットする
