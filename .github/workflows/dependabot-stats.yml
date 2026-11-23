@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
       - name: Dependabot の PR を数える
         shell: bash  # pipefail を効かせ、python が失敗したら step も失敗させる（tee が 0 を返すため）
         env:
